@@ -1,7 +1,7 @@
 import { GEO } from '@varshylinc/geo';
 import type { GEOConfig } from '@varshylinc/geo';
 
-export const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://geo.varshyl.com';
+export const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://geo-toolkit-site.netlify.app';
 
 export const geoConfig: GEOConfig = {
   product: {

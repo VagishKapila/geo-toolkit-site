@@ -66,6 +66,7 @@ export default function Home() {
         <h1 className="mb-5 text-5xl font-bold leading-tight text-white md:text-7xl">
           Is your product readable by AI?
         </h1>
+        <h2 className="sr-only">AI Discoverability Tools for Developers</h2>
         <p className="mb-10 max-w-2xl text-lg text-slate-300">
           Audit any URL in seconds and get exact GEO signals to improve citations in ChatGPT, Claude, and Perplexity.
         </p>
