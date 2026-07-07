@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSorenVoice } from "../hooks/useSorenVoice";
+import { useSorenSTT } from "../hooks/useSorenSTT";
+import { useSorenChat } from "../hooks/useSorenChat";
 
 type CheckInfo = { label: string; icon: string; brief: string; detail: string; sorenSays: string };
 type AuditCheck = { name: string; passed: boolean; points?: number; maxPoints: number; tip?: string };
@@ -14,6 +16,7 @@ type AuditResult = {
   error?: string;
 };
 type MissionPhase = "idle" | "scanning" | "briefing";
+type OrbState = "idle" | "listening" | "thinking" | "speaking";
 
 // ── DESIGN TOKENS ──────────────────────────────────────────
 const C = {
@@ -177,7 +180,12 @@ function getCheckInfo(name: string): CheckInfo {
 }
 
 // ── SOREN ORB ──────────────────────────────────────────────
-function SorenOrb({ size = 80, active = false, speaking = false }: { size?: number; active?: boolean; speaking?: boolean }) {
+function SorenOrb({ size = 80, state = "idle" }: { size?: number; state?: OrbState }) {
+  const listening = state === "listening";
+  const thinking = state === "thinking";
+  const speaking = state === "speaking";
+  const active = listening || thinking || speaking;
+  const ringColor = listening ? C.cyan : C.violet;
   return (
     <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
       {/* Outer rings */}
@@ -185,8 +193,8 @@ function SorenOrb({ size = 80, active = false, speaking = false }: { size?: numb
         <div key={d} style={{
           position: "absolute", inset: -size * 0.15,
           borderRadius: "50%",
-          border: `1px solid ${C.violet}`,
-          animation: `ping-out 2.4s ease-out ${d}ms infinite`,
+          border: `1px solid ${ringColor}`,
+          animation: `ping-out ${listening ? 1.2 : 2.4}s ease-out ${d}ms infinite`,
           pointerEvents: "none",
         }} />
       ))}
@@ -196,15 +204,15 @@ function SorenOrb({ size = 80, active = false, speaking = false }: { size?: numb
         borderRadius: "50%",
         background: `radial-gradient(circle, rgba(168,85,247,0.3), transparent 70%)`,
         filter: "blur(8px)",
-        animation: "soren-breathe 3s ease-in-out infinite",
+        animation: `soren-breathe ${listening ? 1.2 : 3}s ease-in-out infinite`,
       }} />
       {/* Orb body */}
       <div style={{
         position: "absolute", inset: 0,
         borderRadius: "50%",
         background: sorenGradient,
-        animation: "soren-breathe 3s ease-in-out infinite",
-        boxShadow: `0 0 ${size * 0.4}px rgba(168,85,247,0.5), inset 0 2px 4px rgba(255,255,255,0.2)`,
+        animation: `soren-breathe ${listening ? 1.2 : 3}s ease-in-out infinite`,
+        boxShadow: `0 0 ${size * 0.4}px ${listening ? "rgba(34,211,238,0.45)" : "rgba(168,85,247,0.5)"}, inset 0 2px 4px rgba(255,255,255,0.2)`,
         display: "flex", alignItems: "center", justifyContent: "center",
         overflow: "hidden",
       }}>
@@ -396,7 +404,7 @@ function CheckRow({
         }}>
           {/* Soren says */}
           <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
-            <SorenOrb size={32} active />
+            <SorenOrb size={32} state="thinking" />
             <div>
               <div style={{
                 fontFamily: "'Space Grotesk',sans-serif",
@@ -550,6 +558,12 @@ function normalizeUrl(input: string): string {
   catch { return ""; }
 }
 
+function extractFirstUrl(text: string): string {
+  const match = text.match(/((https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/[^\s]*)?)/i);
+  if (!match) return "";
+  return normalizeUrl(match[0]);
+}
+
 function buildBriefingText(result: AuditResult): string {
   const failed = result.checks?.filter((c) => !c.passed).length ?? 0;
   if (result.score >= 90) {
@@ -566,7 +580,8 @@ function buildBriefingText(result: AuditResult): string {
 
 // ── MAIN APP ──────────────────────────────────────────────
 export default function SorenOS() {
-  const [input, setInput] = useState("");
+  const [draft, setDraft] = useState("");
+  const [showTextInput, setShowTextInput] = useState(false);
   const [phase, setPhase] = useState<MissionPhase>("idle");
   const [result, setResult] = useState<AuditResult | null>(null);
   const [error, setError] = useState("");
@@ -574,10 +589,44 @@ export default function SorenOS() {
   const [greeting, setGreetingDone] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [scanDomain, setScanDomain] = useState("");
+  const [activeInput, setActiveInput] = useState("");
   const resultRef = useRef<HTMLElement | null>(null);
-  const apiResultRef = useRef<AuditResult | null>(null);
-  const apiErrorRef = useRef("");
   const { speak, isSpeaking, isMuted, toggleMute } = useSorenVoice();
+  const {
+    messages,
+    auditResult,
+    isThinking,
+    sendMessage,
+    runAuditFromChat,
+    reset: resetChat,
+  } = useSorenChat((replyText) => {
+    void speak(replyText);
+  });
+
+  const handleUserText = async (rawText: string) => {
+    const text = rawText.trim();
+    if (!text) return;
+    setError("");
+    setActiveInput(text);
+    const normalizedUrl = extractFirstUrl(text);
+    if (normalizedUrl) {
+      setScanDomain(new URL(normalizedUrl).hostname);
+      setPhase("scanning");
+      await runAuditFromChat(normalizedUrl);
+      return;
+    }
+    await sendMessage(text);
+  };
+
+  const {
+    state: sttState,
+    transcript,
+    startListening,
+    stopListening,
+    isSupported: isSttSupported,
+  } = useSorenSTT((recognizedText) => {
+    void handleUserText(recognizedText);
+  });
 
   const GREETING = "I'm Soren. Give me any website and I'll tell you exactly how visible your product is to AI engines — and what needs to change.";
 
@@ -593,66 +642,41 @@ export default function SorenOS() {
     }
   }, [voiceEnabled, greeting, speak, GREETING]);
 
-  async function runMission() {
-    const normalized = normalizeUrl(input);
-    if (!normalized) {
-      setError("Enter a website — like varshyl.com or https://yourapp.com");
+  useEffect(() => {
+    if (isThinking) {
+      setPhase("scanning");
       return;
     }
-    setError("");
-    apiResultRef.current = null;
-    apiErrorRef.current = "";
+    if (auditResult) {
+      const mappedResult: AuditResult = {
+        ...auditResult,
+        checks: auditResult.checks.map((check) => ({
+          name: check.name,
+          passed: check.passed,
+          maxPoints: check.maxPoints,
+        })),
+      };
+      setResult(mappedResult);
+      setPhase("briefing");
+      setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+      return;
+    }
+    setPhase("idle");
+  }, [isThinking, auditResult]);
 
-    // Extract domain for display
-    try {
-      const u = new URL(normalized);
-      setScanDomain(u.hostname);
-    } catch { setScanDomain(normalized); }
+  useEffect(() => {
+    if (!auditResult) return;
+    const text = buildBriefingText(auditResult as AuditResult);
+    void speak(text);
+  }, [auditResult, speak]);
 
-    setPhase("scanning");
-
-    // Fire API call immediately
-    fetch("https://toolkit-demo-host-production-ac14.up.railway.app/api/geo-audit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: normalized }),
-      signal: AbortSignal.timeout(15000),
-    })
-      .then(r => r.json())
-      .then((data: AuditResult) => { apiResultRef.current = data; })
-      .catch((e: Error) => { apiErrorRef.current = e.message || "Could not reach that site."; });
-
-    // Wait for animation (2.8s) then show result
-    setTimeout(() => {
-      const poll = setInterval(() => {
-        if (apiResultRef.current || apiErrorRef.current) {
-          clearInterval(poll);
-          if (apiErrorRef.current) {
-            setError(apiErrorRef.current);
-            setPhase("idle");
-          } else if (apiResultRef.current?.error) {
-            setError(apiResultRef.current.error);
-            setPhase("idle");
-          } else if (apiResultRef.current) {
-            const auditResult = apiResultRef.current;
-            setResult(auditResult);
-            setPhase("briefing");
-            const briefingText = buildBriefingText(auditResult);
-            setTimeout(() => speak(briefingText), 800);
-            setTimeout(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
-          }
-        }
-      }, 100);
-      // Timeout after 12s of polling
-      setTimeout(() => {
-        clearInterval(poll);
-        if (!apiResultRef.current && !apiErrorRef.current) {
-          setError("Mission timed out. Try again.");
-          setPhase("idle");
-        }
-      }, 12000);
-    }, 2900);
-  }
+  const orbState: OrbState = isSpeaking
+    ? "speaking"
+    : sttState === "listening"
+    ? "listening"
+    : isThinking || sttState === "processing"
+    ? "thinking"
+    : "idle";
 
   const scoreColor = (s: number) => s >= 90 ? C.green : s >= 75 ? C.cyan : s >= 55 ? C.amber : C.red;
   const gradeLabel = (s: number) => s >= 90 ? "Strong signal" : s >= 75 ? "Good coverage" : s >= 55 ? "Weak signal" : "Off the grid";
@@ -742,7 +766,7 @@ export default function SorenOS() {
             {/* Orb + greeting */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 24 }}>
               <div style={{ animation: "float 4s ease-in-out infinite" }}>
-                <SorenOrb size={90} active={phase === "scanning"} speaking={isSpeaking} />
+                <SorenOrb size={90} state={orbState} />
               </div>
 
               <div style={{
@@ -770,112 +794,269 @@ export default function SorenOS() {
               </div>
             </div>
 
-            {/* Mission input */}
+            {/* Conversation interface */}
             {greeting && (
               <div style={{
-                width: "100%", maxWidth: 580,
+                width: "100%",
+                maxWidth: 640,
                 animation: "token-appear 0.4s ease",
               }}>
-                {/* Command prompt */}
-                <div style={{
-                  fontFamily: "'JetBrains Mono',monospace",
-                  fontSize: 11, color: C.muted,
-                  marginBottom: 8, paddingLeft: 4,
-                  display: "flex", alignItems: "center", gap: 6,
-                }}>
-                  <span style={{ color: C.purple }}>soren@ai</span>
-                  <span style={{ color: C.muted }}>~</span>
-                  <span style={{ color: C.gray }}>$ enter website to scan</span>
-                </div>
-
                 <div style={{
                   background: C.surface,
-                  border: `1px solid ${phase === "scanning" ? C.purple : error ? C.red : C.border}`,
-                  borderRadius: 14, padding: 5,
-                  display: "flex", gap: 8,
-                  boxShadow: phase === "scanning" ? `0 0 30px rgba(168,85,247,0.2)` : "none",
-                  transition: "border-color 0.2s, box-shadow 0.2s",
+                  border: `1px solid ${isThinking ? C.purple : sttState === "listening" ? C.cyan : C.border}`,
+                  borderRadius: 14,
+                  padding: "14px 14px 10px",
+                  boxShadow: isThinking ? "0 0 24px rgba(168,85,247,0.2)" : "none",
                 }}>
                   <div style={{
-                    display: "flex", alignItems: "center", paddingLeft: 12,
                     fontFamily: "'JetBrains Mono',monospace",
-                    fontSize: 14, color: C.muted, flexShrink: 0,
-                  }}>›</div>
-                  <input
-                    value={input}
-                    onChange={e => { setInput(e.target.value); setError(""); }}
-                    onKeyDown={e => e.key === "Enter" && phase === "idle" && runMission()}
-                    placeholder="varshyl.com"
-                    disabled={phase === "scanning"}
-                    style={{
-                      flex: 1, background: "transparent", border: "none",
-                      outline: "none", padding: "13px 4px",
-                      fontFamily: "'JetBrains Mono',monospace",
-                      fontSize: 15, color: C.white,
-                      caretColor: C.purple,
-                    }}
-                  />
-                  <button
-                    onClick={runMission}
-                    disabled={phase === "scanning"}
-                    style={{
-                      background: phase === "scanning" ? C.raised : sorenGradient,
-                      border: "none", cursor: phase === "scanning" ? "not-allowed" : "pointer",
-                      padding: "12px 24px", borderRadius: 10,
-                      fontFamily: "'Space Grotesk',sans-serif",
-                      fontSize: 14, fontWeight: 700, color: "white",
-                      boxShadow: phase === "scanning" ? "none" : "0 4px 20px rgba(168,85,247,0.4)",
-                      transition: "all 0.2s", minWidth: 120,
-                    }}>
-                    {phase === "scanning" ? "Scanning…" : "Run Mission →"}
-                  </button>
+                    fontSize: 11,
+                    color: C.muted,
+                    marginBottom: 10,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}>
+                    <span>
+                      {sttState === "listening"
+                        ? "listening..."
+                        : sttState === "processing"
+                        ? "processing voice..."
+                        : isThinking
+                        ? "soren thinking..."
+                        : "voice conversation ready"}
+                    </span>
+                    <span style={{ color: C.purple }}>
+                      {activeInput ? `target: ${activeInput}` : "say: check my site varshyl.com"}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    minHeight: 180,
+                    maxHeight: 240,
+                    overflowY: "auto",
+                    padding: "6px 4px 10px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}>
+                    {messages.length === 0 ? (
+                      <p style={{
+                        fontFamily: "'Inter',sans-serif",
+                        fontSize: 13,
+                        color: C.gray,
+                        lineHeight: 1.6,
+                      }}>
+                        Start by speaking or typing. Example: &quot;Check my website varshyl.com&quot; or &quot;How can I improve my AI discoverability?&quot;
+                      </p>
+                    ) : (
+                      messages.slice(-8).map((message, index) => (
+                        <div key={`${message.role}-${index}`} style={{
+                          alignSelf: message.role === "user" ? "flex-end" : "flex-start",
+                          maxWidth: "88%",
+                          background: message.role === "user" ? "rgba(168,85,247,0.16)" : C.raised,
+                          border: `1px solid ${message.role === "user" ? "rgba(168,85,247,0.35)" : C.border}`,
+                          borderRadius: 10,
+                          padding: "8px 10px",
+                        }}>
+                          <div style={{
+                            fontFamily: "'JetBrains Mono',monospace",
+                            fontSize: 10,
+                            color: message.role === "user" ? C.purple : C.cyan,
+                            marginBottom: 4,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.07em",
+                          }}>
+                            {message.role === "user" ? "You" : "Soren"}
+                          </div>
+                          <p style={{
+                            margin: 0,
+                            fontFamily: "'Inter',sans-serif",
+                            fontSize: 13,
+                            color: C.text,
+                            lineHeight: 1.5,
+                          }}>
+                            {message.content}
+                          </p>
+                        </div>
+                      ))
+                    )}
+
+                    {sttState === "listening" && transcript && (
+                      <div style={{
+                        alignSelf: "flex-end",
+                        maxWidth: "88%",
+                        background: "rgba(34,211,238,0.1)",
+                        border: "1px solid rgba(34,211,238,0.25)",
+                        borderRadius: 10,
+                        padding: "8px 10px",
+                      }}>
+                        <div style={{
+                          fontFamily: "'JetBrains Mono',monospace",
+                          fontSize: 10,
+                          color: C.cyan,
+                          marginBottom: 4,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.07em",
+                        }}>
+                          Listening
+                        </div>
+                        <p style={{ margin: 0, fontFamily: "'Inter',sans-serif", fontSize: 13, color: C.text }}>
+                          {transcript}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {showTextInput && (
+                    <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                      <input
+                        value={draft}
+                        onChange={(event) => {
+                          setDraft(event.target.value);
+                          setError("");
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && draft.trim()) {
+                            void handleUserText(draft);
+                            setDraft("");
+                          }
+                        }}
+                        placeholder="Type to Soren..."
+                        style={{
+                          flex: 1,
+                          background: C.raised,
+                          border: `1px solid ${C.border}`,
+                          borderRadius: 8,
+                          color: C.white,
+                          fontFamily: "'Inter',sans-serif",
+                          fontSize: 13,
+                          padding: "10px 12px",
+                          outline: "none",
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          if (!draft.trim()) return;
+                          void handleUserText(draft);
+                          setDraft("");
+                        }}
+                        style={{
+                          background: sorenGradient,
+                          border: "none",
+                          color: "white",
+                          borderRadius: 8,
+                          fontFamily: "'Space Grotesk',sans-serif",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          padding: "0 16px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Send
+                      </button>
+                    </div>
+                  )}
+
+                  <div style={{
+                    marginTop: 10,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
+                  }}>
+                    <button
+                      onClick={() => {
+                        if (!isSttSupported) {
+                          setError("Speech recognition is not supported in this browser.");
+                          return;
+                        }
+                        if (sttState === "listening") {
+                          stopListening();
+                          return;
+                        }
+                        startListening();
+                      }}
+                      style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: "50%",
+                        border: `1px solid ${sttState === "listening" ? "rgba(34,211,238,0.55)" : C.border}`,
+                        background: sttState === "listening" ? "rgba(34,211,238,0.2)" : C.raised,
+                        color: sttState === "listening" ? C.cyan : C.text,
+                        cursor: "pointer",
+                        fontSize: 17,
+                      }}
+                      title={sttState === "listening" ? "Stop listening" : "Start listening"}
+                    >
+                      🎙️
+                    </button>
+                    <button
+                      onClick={() => setShowTextInput((prev) => !prev)}
+                      style={{
+                        background: "transparent",
+                        border: `1px solid ${C.border}`,
+                        color: C.gray,
+                        borderRadius: 8,
+                        padding: "8px 12px",
+                        fontFamily: "'Inter',sans-serif",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {showTextInput ? "Hide text input" : "Type instead"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        resetChat();
+                        setResult(null);
+                        setPhase("idle");
+                        setOpenKey(null);
+                        setError("");
+                        setActiveInput("");
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: `1px solid ${C.border}`,
+                        color: C.gray,
+                        borderRadius: 8,
+                        padding: "8px 12px",
+                        fontFamily: "'Inter',sans-serif",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Reset conversation
+                    </button>
+                  </div>
                 </div>
 
                 {error && (
                   <p style={{
                     fontFamily: "'Inter',sans-serif",
-                    fontSize: 13, color: C.red, marginTop: 8, paddingLeft: 4,
-                  }}>⚠ {error}</p>
+                    fontSize: 13,
+                    color: C.red,
+                    marginTop: 8,
+                    paddingLeft: 4,
+                  }}>
+                    ⚠ {error}
+                  </p>
                 )}
 
-                {/* Quick targets */}
-                {phase === "idle" && !result && (
+                {phase === "scanning" && (
                   <div style={{
-                    display: "flex", gap: 8, marginTop: 12,
-                    flexWrap: "wrap", alignItems: "center",
+                    marginTop: 12,
+                    width: "100%",
+                    maxWidth: 640,
+                    background: C.surface,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 14,
+                    padding: "4px 20px 20px",
+                    animation: "token-appear 0.3s ease",
                   }}>
-                    <span style={{ fontSize: 11, color: C.muted, fontFamily: "'JetBrains Mono',monospace" }}>
-                      try:
-                    </span>
-                    {([
-                      ["varshyl.com", 90],
-                      ["example.com", 34],
-                      ["jobsiteintelai.com", 72],
-                    ] as const).map(([site, score]) => (
-                      <button key={site} onClick={() => setInput(site)} style={{
-                        background: C.raised, border: `1px solid ${C.border}`,
-                        color: C.gray, padding: "4px 12px", borderRadius: 6,
-                        fontFamily: "'JetBrains Mono',monospace", fontSize: 11,
-                        cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
-                      }}>
-                        {site}
-                        <span style={{ color: scoreColor(score) }}>{score}</span>
-                      </button>
-                    ))}
+                    <ScanPhase domain={scanDomain || "your-site.com"} />
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Scanning phase */}
-            {phase === "scanning" && (
-              <div style={{
-                width: "100%", maxWidth: 580,
-                background: C.surface, border: `1px solid ${C.border}`,
-                borderRadius: 14, padding: "4px 20px 20px",
-                animation: "token-appear 0.3s ease",
-              }}>
-                <ScanPhase domain={scanDomain} />
               </div>
             )}
           </div>
@@ -893,7 +1074,7 @@ export default function SorenOS() {
                 display: "flex", alignItems: "flex-start", gap: 16,
                 marginBottom: 24,
               }}>
-                <SorenOrb size={44} active />
+                <SorenOrb size={44} state="thinking" />
                 <div style={{ flex: 1 }}>
                   <div style={{
                     fontFamily: "'JetBrains Mono',monospace",
@@ -1017,7 +1198,7 @@ export default function SorenOS() {
 
               {/* Scan again */}
               <div style={{ textAlign: "center", marginTop: 20 }}>
-                <button onClick={() => { setPhase("idle"); setResult(null); setInput(""); setOpenKey(null); }}
+                <button onClick={() => { setPhase("idle"); setResult(null); setDraft(""); setOpenKey(null); resetChat(); setActiveInput(""); }}
                   style={{
                     background: "transparent", border: `1px solid ${C.border}`,
                     color: C.gray, padding: "8px 20px", borderRadius: 8,
