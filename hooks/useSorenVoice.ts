@@ -9,9 +9,11 @@ export function useSorenVoice() {
   const [isMuted, setIsMuted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mutedRef = useRef(false);
-  const busyRef = useRef(false);
+  const queueRef = useRef<string[]>([]);
+  const isPlayingRef = useRef(false);
 
   const stop = useCallback(() => {
+    queueRef.current = [];
     const audio = audioRef.current;
     if (audio) {
       audio.pause();
@@ -19,19 +21,20 @@ export function useSorenVoice() {
       try { audio.src = ''; } catch { /* ignore */ }
       audioRef.current = null;
     }
-    busyRef.current = false;
+    isPlayingRef.current = false;
     setIsSpeaking(false);
   }, []);
 
-  const speak = useCallback(async (text: string) => {
-    if (mutedRef.current) return;
+  const processQueue = useCallback(async () => {
+    if (isPlayingRef.current) return;
+    if (queueRef.current.length === 0) return;
 
-    stop();
-
-    busyRef.current = true;
+    const text = queueRef.current.shift()!;
+    isPlayingRef.current = true;
+    setIsSpeaking(true);
 
     try {
-      setIsSpeaking(true);
+      if (mutedRef.current) return;
 
       const res = await fetch(TTS_URL, {
         method: 'POST',
@@ -40,48 +43,46 @@ export function useSorenVoice() {
         signal: AbortSignal.timeout(10000),
       });
 
-      if (mutedRef.current || !busyRef.current) {
-        setIsSpeaking(false);
-        return;
-      }
-
-      if (!res.ok) {
-        setIsSpeaking(false);
-        busyRef.current = false;
-        return;
-      }
+      if (!res.ok || mutedRef.current) return;
 
       const blob = await res.blob();
-
-      if (mutedRef.current || !busyRef.current) {
-        setIsSpeaking(false);
-        return;
-      }
+      if (mutedRef.current) return;
 
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
 
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        audioRef.current = null;
-        busyRef.current = false;
-        setIsSpeaking(false);
-      };
-
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        audioRef.current = null;
-        busyRef.current = false;
-        setIsSpeaking(false);
-      };
-
-      await audio.play();
+      await new Promise<void>((resolve) => {
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+          resolve();
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+          resolve();
+        };
+        audio.play().catch(() => {
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+          resolve();
+        });
+      });
     } catch {
-      busyRef.current = false;
-      setIsSpeaking(false);
+      // silent fail
+    } finally {
+      isPlayingRef.current = false;
+      setIsSpeaking(queueRef.current.length > 0);
+      setTimeout(processQueue, 150);
     }
-  }, [stop]);
+  }, []);
+
+  const speak = useCallback(async (text: string) => {
+    if (mutedRef.current) return;
+    queueRef.current.push(text);
+    processQueue();
+  }, [processQueue]);
 
   const toggleMute = useCallback(() => {
     const newMuted = !mutedRef.current;
