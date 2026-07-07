@@ -51,6 +51,7 @@ interface UseSorenChatReturn {
   runAuditFromChat: (url: string) => Promise<void>;
   reset: () => void;
   clearFixPackage: () => void;
+  restoreFixPackage: (pkg: FixPackage) => void;
 }
 
 async function requestFix(
@@ -207,6 +208,10 @@ export function useSorenChat(onReply: (text: string) => void): UseSorenChatRetur
     setFixPackage(null);
   }, []);
 
+  const restoreFixPackage = useCallback((pkg: FixPackage) => {
+    setFixPackage(pkg);
+  }, []);
+
   return {
     messages,
     auditResult,
@@ -216,5 +221,6 @@ export function useSorenChat(onReply: (text: string) => void): UseSorenChatRetur
     runAuditFromChat,
     reset,
     clearFixPackage,
+    restoreFixPackage,
   };
 }

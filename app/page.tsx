@@ -618,6 +618,7 @@ export default function SorenOS() {
     runAuditFromChat,
     reset: resetChat,
     clearFixPackage,
+    restoreFixPackage,
   } = useSorenChat((replyText) => {
     void speakOnce(replyText);
   });
@@ -648,6 +649,12 @@ export default function SorenOS() {
     const currentBalance = await fetchBalance(userEmail);
 
     if (currentBalance < 5) {
+      if (fixPackage) {
+        sessionStorage.setItem(
+          'soren_pending_fix',
+          JSON.stringify(fixPackage),
+        );
+      }
       await startCheckout(userEmail, 5, auditResult?.url ?? "");
       return;
     }
@@ -667,6 +674,12 @@ export default function SorenOS() {
         "I will check your score.",
       );
     } else {
+      if (fixPackage) {
+        sessionStorage.setItem(
+          'soren_pending_fix',
+          JSON.stringify(fixPackage),
+        );
+      }
       await startCheckout(userEmail, 5, auditResult?.url ?? "");
     }
     setIsApplying(false);
@@ -678,6 +691,7 @@ export default function SorenOS() {
     deductCredits,
     auditResult?.url,
     speakOnce,
+    fixPackage,
   ]);
 
   useEffect(() => {
@@ -693,15 +707,63 @@ export default function SorenOS() {
     const urlEmail = params.get("email");
     if (urlEmail) {
       saveEmail(urlEmail);
-      void fetchBalance(urlEmail).then(() => {
-        void speakOnce(
-          "Your credits are ready. Want me to apply the fix now?",
-        );
-      });
+      void fetchBalance(urlEmail);
+    }
+
+    const pendingFix = sessionStorage.getItem('soren_pending_fix');
+    if (pendingFix) {
+      try {
+        const pkg = JSON.parse(pendingFix) as typeof fixPackage;
+        if (pkg) {
+          restoreFixPackage(pkg);
+          sessionStorage.removeItem('soren_pending_fix');
+
+          setTimeout(async () => {
+            if (!urlEmail) return;
+            const success = await deductCredits(
+              urlEmail,
+              5,
+              `Fix for ${pkg.platform} site`,
+            );
+            if (success) {
+              setFixApplied(true);
+              void speakOnce(
+                'Payment confirmed. ' +
+                'Your fix package is ready. ' +
+                'Download the files below and follow ' +
+                'the steps. ' +
+                'Tap the audit button when done and ' +
+                'I will check your score.',
+              );
+            } else if (urlEmail) {
+              sessionStorage.setItem(
+                'soren_pending_fix',
+                JSON.stringify(pkg),
+              );
+              await startCheckout(urlEmail, 5, auditResult?.url ?? "");
+            }
+          }, 1500);
+        }
+      } catch {
+        // JSON parse failed — ignore
+      }
+    } else {
+      void speakOnce(
+        'Your credits are ready. ' +
+        'Tell me your website and I will fix it.',
+      );
     }
 
     window.history.replaceState({}, "", window.location.pathname);
-  }, [saveEmail, fetchBalance, speakOnce]);
+  }, [
+    saveEmail,
+    fetchBalance,
+    speakOnce,
+    restoreFixPackage,
+    deductCredits,
+    startCheckout,
+    auditResult?.url,
+  ]);
 
   useEffect(() => {
     if (!fixPackage) {
@@ -743,10 +805,14 @@ export default function SorenOS() {
   }, []);
 
   useEffect(() => {
-    if (voiceEnabled && greeting) {
-      void speakOnce(GREETING);
-    }
-  }, [voiceEnabled, greeting, speakOnce, GREETING]);
+    if (!voiceEnabled) return;
+
+    const hasGreeted = sessionStorage.getItem('soren_greeted');
+    if (hasGreeted) return;
+
+    sessionStorage.setItem('soren_greeted', '1');
+    void speakOnce(GREETING);
+  }, [voiceEnabled, speakOnce, GREETING]);
 
   useEffect(() => {
     if (isThinking) {
