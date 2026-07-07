@@ -29,6 +29,54 @@ const HUD = {
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,monospace";
 
+const CHECK_PLAIN: Record<string, { title: string; why: string; sorenFix: string }> = {
+  'llms.txt': {
+    title: 'AI engines can\'t find your product guide',
+    why: 'When ChatGPT or Claude searches for products like yours, they look for an AI guide file first. Without it, they guess what your product does — and guessing leads to wrong answers.',
+    sorenFix: 'I\'d generate your AI guide file pre-filled with your real product details. One file, deployed in 30 seconds.',
+  },
+  'robots.txt AI crawlers': {
+    title: 'You\'re blocking AI from reading your site',
+    why: 'Your robots file doesn\'t list the major AI crawlers. GPTBot, ClaudeBot, and PerplexityBot are treating your site as off-limits.',
+    sorenFix: 'I\'d update your robots file to explicitly allow the AI crawlers that matter. Takes me 10 seconds.',
+  },
+  'JSON-LD script': {
+    title: 'AI doesn\'t know what type of product you are',
+    why: 'Structured data tells AI engines your exact product category and key facts. Without it, AI infers from page text — which is unreliable.',
+    sorenFix: 'I\'d generate the exact structured data for your product type, pre-filled with your company and product information.',
+  },
+  'Open Graph tags': {
+    title: 'Your site shows as a blank when shared',
+    why: 'Open Graph tags control how your link looks when shared and signal to AI systems what your page title, description, and key image are.',
+    sorenFix: 'I\'d add all four required Open Graph tags to your page header with your real content.',
+  },
+  'Twitter card tag': {
+    title: 'Missing social sharing metadata',
+    why: 'The Twitter card tag signals that your content is meant to be shared and cited — a trust signal AI engines use when deciding whether to reference you.',
+    sorenFix: 'One meta tag. I\'d add it in seconds.',
+  },
+  'Heading structure': {
+    title: 'AI can\'t understand your page structure',
+    why: 'AI engines use heading tags to understand what a page is about. A page without clear headings is like a document without chapters.',
+    sorenFix: 'I\'d add the missing heading tags in the right places without changing your visual design.',
+  },
+  'sitemap.xml': {
+    title: 'AI crawlers are missing your key pages',
+    why: 'A sitemap tells AI crawlers exactly which pages exist on your site. Without one, crawlers stumble through randomly and may miss important content.',
+    sorenFix: 'I\'d generate a complete sitemap for all your pages and configure it to auto-update.',
+  },
+  'Canonical link': {
+    title: 'AI may be reading duplicate versions of your site',
+    why: 'The canonical tag tells AI which version of a page is definitive. Without it, AI may treat duplicate URLs as separate conflicting sources.',
+    sorenFix: 'I\'d add the canonical tag pointing to your primary URL on every page.',
+  },
+  'Schema.org entity': {
+    title: 'AI doesn\'t know who built this product',
+    why: 'Schema markup connects your product to your company — building the knowledge graph AI systems use to determine credibility and attribution.',
+    sorenFix: 'I\'d generate the complete entity graph connecting your product, company, and founder identity.',
+  },
+};
+
 interface ActionCardData {
   label: string;
   message: string;
@@ -53,12 +101,12 @@ function buildBriefingText(result: {
 }
 
 // ── SorenOrb ──────────────────────────────────────────────
-function SorenOrb({ state, size = 160 }: { state: OrbState; size?: number }) {
+function SorenOrb({ state, size = 160, compact = false }: { state: OrbState; size?: number; compact?: boolean }) {
   const listening = state === 'listening';
   const thinking = state === 'thinking';
   const speaking = state === 'speaking';
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+    <div className="soren-orb-wrap" style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       {listening && [0, 500, 1000].map((d) => (
         <div
           key={d}
@@ -72,7 +120,7 @@ function SorenOrb({ state, size = 160 }: { state: OrbState; size?: number }) {
           }}
         />
       ))}
-      {[0, 1, 2].map((i) => (
+      {!compact && [0, 1, 2].map((i) => (
         <div
           key={i}
           style={{
@@ -349,7 +397,15 @@ function URLConfirmCard({
 }
 
 // ── ActionCard ────────────────────────────────────────────
-function ActionCard({ card, onDismiss }: { card: ActionCardData; onDismiss: () => void }) {
+function ActionCard({
+  card,
+  onDismiss,
+  sticky = false,
+}: {
+  card: ActionCardData;
+  onDismiss: () => void;
+  sticky?: boolean;
+}) {
   return (
     <div
       style={{
@@ -359,6 +415,9 @@ function ActionCard({ card, onDismiss }: { card: ActionCardData; onDismiss: () =
         padding: '14px 16px',
         animation: 'hud-card-in .25s ease',
         marginBottom: 10,
+        ...(sticky
+          ? { position: 'sticky', top: 0, zIndex: 10 }
+          : {}),
       }}
     >
       <div
@@ -501,6 +560,8 @@ export default function SorenOS() {
   const [activeCard, setActiveCard] = useState<ActionCardData | null>(null);
   const [deliveryOption, setDeliveryOption] = useState<DeliveryOption>(null);
   const [openCheck, setOpenCheck] = useState<string | null>(null);
+  const [showLog, setShowLog] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const speakGuardRef = useRef(false);
   const shownCardForUrl = useRef<string | null>(null);
@@ -613,7 +674,7 @@ export default function SorenOS() {
             fn: () => {
               setDeliveryOption('B');
               setActiveCard(null);
-              void sendMessage('guide me through the fix');
+              void sendMessage('yes fix it guide me through the steps');
             },
           },
           {
@@ -715,6 +776,14 @@ export default function SorenOS() {
     setActiveCard(card);
     setDockedCards((d) => d.filter((_, idx) => idx !== i));
   }, [dockedCards]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     if (email) {
@@ -929,6 +998,7 @@ export default function SorenOS() {
 
       {/* TICKER */}
       <div
+        className="soren-ticker"
         style={{
           overflow: 'hidden',
           borderBottom: `1px solid ${HUD.panelBorder}`,
@@ -984,9 +1054,11 @@ export default function SorenOS() {
             overflowY: 'auto',
           }}
         >
-          <SorenOrb state={orbState} size={160} />
+          <div className="soren-left-orb">
+            <SorenOrb state={orbState} size={isMobile ? 100 : 160} compact={isMobile} />
+          </div>
 
-          <div style={{ textAlign: 'center' }}>
+          <div className="soren-left-meta" style={{ textAlign: 'center' }}>
             <div
               style={{
                 fontSize: 22,
@@ -1005,7 +1077,7 @@ export default function SorenOS() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 2, height: 12, alignItems: 'center' }}>
+          <div className="soren-left-waveform" style={{ display: 'flex', gap: 2, height: 12, alignItems: 'center' }}>
             {Array.from({ length: 36 }).map((_, i) => (
               <span
                 key={i}
@@ -1061,7 +1133,7 @@ export default function SorenOS() {
           )}
 
           {voiceEnabled && !pendingUrl && (
-            <div style={{ width: '100%', maxWidth: 280, marginTop: 'auto' }}>
+            <div className="soren-left-controls" style={{ width: '100%', maxWidth: 280, marginTop: 'auto' }}>
               <div
                 style={{
                   display: 'flex',
@@ -1172,7 +1244,9 @@ export default function SorenOS() {
             paddingBottom: dockedCards.length ? 56 : 20,
           }}
         >
-          {activeCard && <ActionCard card={activeCard} onDismiss={dismissCard} />}
+          {activeCard && (
+            <ActionCard card={activeCard} onDismiss={dismissCard} sticky={isMobile} />
+          )}
 
           {phase === 'scanning' && (
             <div
@@ -1193,7 +1267,206 @@ export default function SorenOS() {
             </div>
           )}
 
-          {fixPackage && deliveryOption && (
+          {fixPackage && deliveryOption === 'B' && (
+            <div
+              style={{
+                border: `1px solid ${HUD.panelBorder}`,
+                borderRadius: 8,
+                background: HUD.panel,
+                padding: '16px 18px',
+                animation: 'hud-slide-right .4s ease',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 14,
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: 9,
+                      color: HUD.textDim,
+                      fontFamily: MONO,
+                      letterSpacing: 1.5,
+                      marginBottom: 4,
+                    }}
+                  >
+                    GUIDED FIX — {fixPackage.platform?.toUpperCase()}
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: HUD.text }}>
+                    Step by step instructions
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDeliveryOption(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: HUD.textDim,
+                    cursor: 'pointer',
+                    fontSize: 16,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {fixPackage.instructions?.map((step, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    gap: 12,
+                    marginBottom: 14,
+                    padding: '10px 12px',
+                    borderRadius: 6,
+                    background: 'rgba(94,234,212,0.04)',
+                    border: `1px solid ${HUD.tealFaint}`,
+                    animation: `hud-fade-up .3s ease ${i * 60}ms both`,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: '50%',
+                      background: 'rgba(94,234,212,0.15)',
+                      border: `1px solid ${HUD.teal}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: HUD.teal,
+                      fontFamily: MONO,
+                    }}
+                  >
+                    {i + 1}
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: HUD.text,
+                        marginBottom: 3,
+                        fontFamily: 'Inter,sans-serif',
+                      }}
+                    >
+                      {step.title}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: HUD.textDim,
+                        fontFamily: 'Inter,sans-serif',
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      {step.detail}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {fixPackage.files?.map((file, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '10px 12px',
+                    borderRadius: 6,
+                    background: 'rgba(94,234,212,0.04)',
+                    border: `1px solid ${HUD.tealFaint}`,
+                    marginBottom: 8,
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: HUD.teal,
+                        fontFamily: MONO,
+                        marginBottom: 2,
+                      }}
+                    >
+                      {file.filename}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: HUD.textDim,
+                        fontFamily: 'Inter,sans-serif',
+                      }}
+                    >
+                      {file.description}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const blob = new Blob([file.content], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = file.filename;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    style={{
+                      background: 'rgba(94,234,212,0.08)',
+                      border: `1px solid ${HUD.teal}`,
+                      color: HUD.teal,
+                      padding: '6px 14px',
+                      borderRadius: 5,
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      marginLeft: 12,
+                    }}
+                  >
+                    ↓ DOWNLOAD
+                  </button>
+                </div>
+              ))}
+
+              <button
+                onClick={() => {
+                  setDeliveryOption(null);
+                  void speak(
+                    cleanForSpeech(
+                      'Done. Tell me the website again and I will re-check your score.',
+                    ),
+                  );
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 0',
+                  borderRadius: 6,
+                  marginTop: 8,
+                  border: `1px solid ${HUD.tealFaint}`,
+                  background: 'transparent',
+                  color: HUD.textDim,
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  cursor: 'pointer',
+                }}
+              >
+                ✓ DONE — RE-CHECK MY SCORE
+              </button>
+            </div>
+          )}
+
+          {fixPackage && (deliveryOption === 'A' || deliveryOption === 'C') && (
             <div style={{ animation: 'hud-slide-right .4s ease' }}>
               {showEmailGate && (
                 <div style={{ marginBottom: 16 }}>
@@ -1238,8 +1511,35 @@ export default function SorenOS() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 14,
+                  background:
+                    auditResult.score >= 90
+                      ? 'rgba(52,211,153,0.08)'
+                      : auditResult.score >= 75
+                        ? 'rgba(94,234,212,0.08)'
+                        : auditResult.score >= 55
+                          ? 'rgba(251,191,36,0.08)'
+                          : 'rgba(248,113,113,0.08)',
                 }}
               >
+                <div
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: isMobile ? 32 : 28,
+                    fontWeight: 700,
+                    color:
+                      auditResult.score >= 90
+                        ? HUD.green
+                        : auditResult.score >= 75
+                          ? HUD.teal
+                          : auditResult.score >= 55
+                            ? HUD.amber
+                            : HUD.red,
+                    lineHeight: 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  {auditResult.score}
+                </div>
                 <div>
                   <div
                     style={{
@@ -1263,8 +1563,8 @@ export default function SorenOS() {
               </div>
               <div
                 style={{
-                  display: 'flex',
-                  flexDirection: 'column',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, 1fr)',
                   gap: 5,
                   padding: '12px 16px',
                 }}
@@ -1272,7 +1572,7 @@ export default function SorenOS() {
                 {auditResult.checks?.map((c, i) => {
                   const isOpen = openCheck === c.name;
                   return (
-                    <div key={c.name}>
+                    <div key={c.name} style={!c.passed && isOpen ? { gridColumn: '1 / -1' } : undefined}>
                       <div
                         role={c.passed ? undefined : 'button'}
                         onClick={() => {
@@ -1318,25 +1618,180 @@ export default function SorenOS() {
                         <div
                           style={{
                             marginTop: 4,
-                            padding: '10px 12px',
-                            borderRadius: 5,
-                            background: 'rgba(94,234,212,0.04)',
-                            border: `1px solid ${HUD.tealFaint}`,
-                            animation: 'hud-fade-up .2s ease',
+                            background: 'rgba(10,14,13,0.9)',
+                            border: '1px solid rgba(248,113,113,0.2)',
+                            borderRadius: 6,
+                            padding: '12px 14px',
+                            animation: 'hud-card-in .2s ease',
                           }}
                         >
-                          <p
+                          <div
                             style={{
-                              fontFamily: 'Inter,sans-serif',
-                              fontSize: 11,
-                              color: HUD.textDim,
-                              lineHeight: 1.6,
-                              margin: 0,
+                              display: 'flex',
+                              gap: 10,
+                              marginBottom: 10,
+                              alignItems: 'flex-start',
                             }}
                           >
-                            {c.tip ||
-                              'This signal helps AI engines understand your site. I can generate the fix for you.'}
-                          </p>
+                            <div
+                              style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: '50%',
+                                background: HUD.grad,
+                                flexShrink: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: 'white',
+                                marginTop: 2,
+                              }}
+                            >
+                              S
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div
+                                style={{
+                                  fontSize: 9,
+                                  fontWeight: 700,
+                                  color: HUD.teal,
+                                  fontFamily: MONO,
+                                  marginBottom: 5,
+                                  letterSpacing: 0.5,
+                                }}
+                              >
+                                SOREN ANALYSIS
+                              </div>
+                              {CHECK_PLAIN[c.name] ? (
+                                <>
+                                  <p
+                                    style={{
+                                      fontSize: 12,
+                                      color: HUD.amber,
+                                      fontFamily: 'Inter,sans-serif',
+                                      fontWeight: 600,
+                                      lineHeight: 1.5,
+                                      margin: '0 0 6px',
+                                    }}
+                                  >
+                                    {CHECK_PLAIN[c.name].title}
+                                  </p>
+                                  <p
+                                    style={{
+                                      fontSize: 12,
+                                      color: HUD.text,
+                                      fontFamily: 'Inter,sans-serif',
+                                      lineHeight: 1.65,
+                                      margin: 0,
+                                    }}
+                                  >
+                                    {CHECK_PLAIN[c.name].why}
+                                  </p>
+                                </>
+                              ) : (
+                                <p
+                                  style={{
+                                    fontSize: 12,
+                                    color: HUD.text,
+                                    fontFamily: 'Inter,sans-serif',
+                                    lineHeight: 1.65,
+                                    margin: 0,
+                                  }}
+                                >
+                                  {c.tip}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {CHECK_PLAIN[c.name] && (
+                            <div
+                              style={{
+                                background: 'rgba(94,234,212,0.04)',
+                                border: `1px solid ${HUD.tealFaint}`,
+                                borderRadius: 6,
+                                padding: '8px 12px',
+                                fontSize: 12,
+                                color: HUD.textDim,
+                                fontFamily: 'Inter,sans-serif',
+                                fontStyle: 'italic',
+                                marginBottom: 12,
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              &ldquo;{CHECK_PLAIN[c.name].sorenFix}&rdquo;
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenCheck(null);
+                                setActiveCard({
+                                  label: `Fix: ${c.name}`,
+                                  message:
+                                    CHECK_PLAIN[c.name]?.sorenFix ??
+                                    'I can fix this for you. Five credits — about one dollar. Shall I begin?',
+                                  actions: [
+                                    {
+                                      label: '✓ LET SOREN FIX — 5 CREDITS',
+                                      fn: () => {
+                                        setDeliveryOption('C');
+                                        setActiveCard(null);
+                                        void sendMessage('yes fix it for me').then(() => {
+                                          void handleApplyFix();
+                                        });
+                                      },
+                                    },
+                                    {
+                                      label: "I'LL DO IT MYSELF",
+                                      fn: () => {
+                                        setDeliveryOption('A');
+                                        setActiveCard(null);
+                                        void sendMessage("I'll fix it myself");
+                                      },
+                                    },
+                                  ],
+                                });
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: '8px 0',
+                                borderRadius: 5,
+                                border: `1px solid ${HUD.teal}`,
+                                background: 'rgba(94,234,212,0.08)',
+                                color: HUD.teal,
+                                fontFamily: MONO,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                minWidth: 160,
+                              }}
+                            >
+                              LET SOREN FIX — 5 CREDITS
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenCheck(null);
+                              }}
+                              style={{
+                                padding: '8px 14px',
+                                borderRadius: 5,
+                                border: `1px solid ${HUD.tealFaint}`,
+                                background: 'transparent',
+                                color: HUD.textDim,
+                                fontFamily: MONO,
+                                fontSize: 10,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1352,15 +1807,34 @@ export default function SorenOS() {
               borderRadius: 8,
               background: HUD.panel,
               padding: '14px 16px',
-              flex: 1,
-              minHeight: 180,
+              flex: isMobile && !showLog ? undefined : 1,
+              minHeight: isMobile && !showLog ? undefined : 180,
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => isMobile && setShowLog((v) => !v)}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: isMobile && !showLog ? 0 : 12,
+                width: '100%',
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                cursor: isMobile ? 'pointer' : 'default',
+                textAlign: 'left',
+              }}
+            >
               <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: HUD.textDim }}>
                 CONVERSATION LOG
+                {isMobile && (
+                  <span style={{ marginLeft: 8, color: HUD.tealDim }}>
+                    {showLog ? '▲' : '▼'} {messages.length} message{messages.length !== 1 ? 's' : ''}
+                  </span>
+                )}
               </span>
-              {voiceEnabled && (
+              {voiceEnabled && (!isMobile || showLog) && (
                 <span
                   style={{
                     fontSize: 9,
@@ -1383,7 +1857,9 @@ export default function SorenOS() {
                   LIVE
                 </span>
               )}
-            </div>
+            </button>
+            {(!isMobile || showLog) && (
+              <>
             {messages.map((msg, i) => (
               <div
                 key={`${msg.role}-${i}`}
@@ -1412,6 +1888,8 @@ export default function SorenOS() {
               <div style={{ fontSize: 10, color: HUD.textDim, marginTop: 8 }}>
                 &gt; speak naturally — no button needed
               </div>
+            )}
+              </>
             )}
           </div>
         </div>

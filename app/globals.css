@@ -81,6 +81,29 @@ body {
   .soren-left {
     border-right: none !important;
     border-bottom: 1px solid rgba(94,234,212,0.14) !important;
-    padding: 24px 16px !important;
+    padding: 20px 16px !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 16px !important;
+    height: auto !important;
+  }
+  .soren-ticker {
+    display: none !important;
+  }
+  .soren-left-waveform {
+    display: none !important;
+  }
+  .soren-left-orb .soren-orb-wrap {
+    width: 80px !important;
+    height: 80px !important;
+  }
+  .soren-left-meta {
+    text-align: left !important;
+    flex: 1;
+  }
+  .soren-left-controls {
+    margin-top: 0 !important;
+    max-width: none !important;
+    flex-shrink: 0;
   }
 }
