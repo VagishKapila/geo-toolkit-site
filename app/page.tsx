@@ -6,8 +6,10 @@ import { useSorenSTT } from "../hooks/useSorenSTT";
 import { useSorenChat } from "../hooks/useSorenChat";
 import { useCredits } from "../hooks/useCredits";
 import { cleanForSpeech } from "../lib/cleanForSpeech";
-import { FixPackage } from "../components/FixPackage";
-import { EmailGate } from "../components/EmailGate";
+import { FixDeliveryCards } from "../components/FixDeliveryCards";
+
+const API = 'https://toolkit-demo-host-production-ac14.up.railway.app';
+const FIX_URL = `${API}/api/soren/fix`;
 
 type CheckInfo = { label: string; icon: string; brief: string; detail: string; sorenSays: string };
 type AuditCheck = { name: string; passed: boolean; points?: number; maxPoints: number; tip?: string };
@@ -594,10 +596,6 @@ export default function SorenOS() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [scanDomain, setScanDomain] = useState("");
   const [activeInput, setActiveInput] = useState("");
-  const [showEmailGate, setShowEmailGate] = useState(false);
-  const [isApplying, setIsApplying] = useState(false);
-  const [applyError, setApplyError] = useState<string | null>(null);
-  const [fixApplied, setFixApplied] = useState(false);
   const resultRef = useRef<HTMLElement | null>(null);
   const speakGuardRef = useRef(false);
   const { speak, isSpeaking, isMuted, toggleMute } = useSorenVoice();
@@ -625,74 +623,11 @@ export default function SorenOS() {
 
   const {
     email,
-    balance,
-    isLoading: creditsLoading,
     saveEmail,
     fetchBalance,
     startCheckout,
     deductCredits,
   } = useCredits();
-
-  const handleApplyFix = useCallback(async (overrideEmail?: string) => {
-    setApplyError(null);
-    const userEmail = overrideEmail ?? email;
-
-    if (!userEmail) {
-      setShowEmailGate(true);
-      return;
-    }
-
-    if (overrideEmail) {
-      saveEmail(overrideEmail);
-    }
-
-    const currentBalance = await fetchBalance(userEmail);
-
-    if (currentBalance < 5) {
-      if (fixPackage) {
-        sessionStorage.setItem(
-          'soren_pending_fix',
-          JSON.stringify(fixPackage),
-        );
-      }
-      await startCheckout(userEmail, 5, auditResult?.url ?? "");
-      return;
-    }
-
-    setIsApplying(true);
-    const success = await deductCredits(
-      userEmail,
-      5,
-      `Fix for ${auditResult?.url ?? "site"}`,
-    );
-
-    if (success) {
-      setFixApplied(true);
-      void speakOnce(
-        "Done. Your fix package is ready to download. " +
-        "Apply it and run the audit again. " +
-        "I will check your score.",
-      );
-    } else {
-      if (fixPackage) {
-        sessionStorage.setItem(
-          'soren_pending_fix',
-          JSON.stringify(fixPackage),
-        );
-      }
-      await startCheckout(userEmail, 5, auditResult?.url ?? "");
-    }
-    setIsApplying(false);
-  }, [
-    email,
-    saveEmail,
-    fetchBalance,
-    startCheckout,
-    deductCredits,
-    auditResult?.url,
-    speakOnce,
-    fixPackage,
-  ]);
 
   useEffect(() => {
     if (email) {
@@ -702,7 +637,54 @@ export default function SorenOS() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("credits_success") !== "true") return;
+
+    const handlePaymentReturns = async () => {
+      const aiSuccess = params.get('ai_package_success');
+      if (aiSuccess === 'true') {
+        window.history.replaceState({}, '', window.location.pathname);
+        const savedData = sessionStorage.getItem('soren_ai_package_data');
+        if (savedData) {
+          try {
+            sessionStorage.removeItem('soren_ai_package_data');
+            const pkgData = JSON.parse(savedData) as {
+              platform: string;
+              failingChecks: { name: string; tip: string }[];
+              siteInfo: { url: string };
+            };
+            const res = await fetch(`${API}/api/soren/fix/ai-package`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(pkgData),
+            });
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `soren-ai-package-${pkgData.platform}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+            void speakOnce(
+              'Your AI package is downloading. Open it and paste the prompt into ChatGPT. Your AI will guide you through the rest.',
+            );
+          } catch {
+            // ignore parse/download errors
+          }
+        }
+        return;
+      }
+
+      const callSuccess = params.get('call_success');
+      const calendlyUrl = params.get('calendly');
+      if (callSuccess === 'true' && calendlyUrl) {
+        window.history.replaceState({}, '', window.location.pathname);
+        window.open(decodeURIComponent(calendlyUrl), '_blank');
+        void speakOnce(
+          'Payment confirmed. Your Calendly booking page just opened. Pick a time that works for you.',
+        );
+        return;
+      }
+
+      if (params.get('credits_success') !== 'true') return;
 
     const urlEmail = params.get("email");
     if (urlEmail) {
@@ -726,7 +708,6 @@ export default function SorenOS() {
               `Fix for ${pkg.platform} site`,
             );
             if (success) {
-              setFixApplied(true);
               void speakOnce(
                 'Payment confirmed. ' +
                 'Your fix package is ready. ' +
@@ -755,6 +736,9 @@ export default function SorenOS() {
     }
 
     window.history.replaceState({}, "", window.location.pathname);
+    };
+
+    void handlePaymentReturns();
   }, [
     saveEmail,
     fetchBalance,
@@ -766,10 +750,36 @@ export default function SorenOS() {
   ]);
 
   useEffect(() => {
-    if (!fixPackage) {
-      setFixApplied(false);
-    }
-  }, [fixPackage]);
+    if (!auditResult || fixPackage) return;
+
+    const failing = auditResult.checks.filter((c) => !c.passed);
+    if (failing.length === 0) return;
+
+    const platform =
+      (auditResult as AuditResult & { platform?: string }).platform ?? 'Website';
+
+    void fetch(FIX_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        platform,
+        failingChecks: failing.map((c) => ({
+          name: c.name,
+          tip: c.tip ?? '',
+        })),
+        siteInfo: { url: auditResult.url },
+      }),
+    })
+      .then((res) => res.json())
+      .then((pkg) => {
+        if (pkg?.files) {
+          restoreFixPackage(pkg);
+        }
+      })
+      .catch(() => {
+        // prefetch failed — user can still request via chat
+      });
+  }, [auditResult, fixPackage, restoreFixPackage]);
 
   const handleUserText = async (rawText: string) => {
     const text = rawText.trim();
@@ -1422,28 +1432,28 @@ export default function SorenOS() {
           </section>
         )}
 
-        {fixPackage && (
+        {auditResult && fixPackage && (
           <section style={{ padding: "0 40px 40px" }}>
-            <div style={{ maxWidth: 700, margin: "0 auto" }}>
-              {showEmailGate && (
-                <div style={{ marginBottom: 16 }}>
-                  <EmailGate
-                    isLoading={creditsLoading}
-                    onSubmit={(e) => {
-                      setShowEmailGate(false);
-                      void handleApplyFix(e);
-                    }}
-                  />
-                </div>
-              )}
-              <FixPackage
-                pkg={fixPackage}
+            <div style={{ maxWidth: 900, margin: "0 auto" }}>
+              <FixDeliveryCards
+                auditResult={{
+                  url: auditResult.url,
+                  score: auditResult.score,
+                  grade: auditResult.grade,
+                  platform:
+                    (auditResult as AuditResult & { platform?: string }).platform ??
+                    'Website',
+                  checks: auditResult.checks.map((c) => ({
+                    name: c.name,
+                    passed: c.passed,
+                    tip: c.tip ?? '',
+                  })),
+                }}
+                email={email ?? ''}
                 onClose={() => clearFixPackage()}
-                onApplyFix={handleApplyFix}
-                isApplying={isApplying}
-                applyError={applyError}
-                creditsBalance={balance}
-                downloadsUnlocked={fixApplied}
+                speak={(text) => {
+                  void speakOnce(text);
+                }}
               />
             </div>
           </section>
