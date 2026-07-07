@@ -1,0 +1,26 @@
+export function cleanForSpeech(text: string): string {
+  return text
+    .replace(/robots\.txt/gi, 'your robots file')
+    .replace(/llms\.txt/gi, 'your A I guide file')
+    .replace(/sitemap\.xml/gi, 'your sitemap')
+    .replace(/sitemap/gi, 'sitemap')
+    .replace(/\.txt\b/gi, ' text file')
+    .replace(/\.xml\b/gi, '')
+    .replace(/\.json\b/gi, '')
+    .replace(/\.html\b/gi, '')
+    .replace(/JSON-LD/gi, 'structured data')
+    .replace(/JSON LD/gi, 'structured data')
+    .replace(/Open Graph/gi, 'social preview tags')
+    .replace(/og:/gi, '')
+    .replace(/Schema\.org/gi, 'schema markup')
+    .replace(/GEO\b/gi, 'AI discoverability')
+    .replace(/\bSEO\b/gi, 'search optimization')
+    .replace(/\bAPI\b/gi, 'A P I')
+    .replace(/\bURL\b/gi, 'web address')
+    .replace(/https?:\/\//gi, '')
+    .replace(/www\./gi, '')
+    .replace(/(\d+)\/100/g, '$1 out of 100')
+    .replace(/\bgrade ([A-F])\b/gi, 'grade $1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSorenVoice } from "../hooks/useSorenVoice";
 import { useSorenSTT } from "../hooks/useSorenSTT";
 import { useSorenChat } from "../hooks/useSorenChat";
+import { cleanForSpeech } from "../lib/cleanForSpeech";
 
 type CheckInfo = { label: string; icon: string; brief: string; detail: string; sorenSays: string };
 type AuditCheck = { name: string; passed: boolean; points?: number; maxPoints: number; tip?: string };
@@ -591,7 +592,16 @@ export default function SorenOS() {
   const [scanDomain, setScanDomain] = useState("");
   const [activeInput, setActiveInput] = useState("");
   const resultRef = useRef<HTMLElement | null>(null);
+  const speakGuardRef = useRef(false);
   const { speak, isSpeaking, isMuted, toggleMute } = useSorenVoice();
+
+  const speakOnce = useCallback(async (text: string) => {
+    if (speakGuardRef.current) return;
+    speakGuardRef.current = true;
+    await speak(cleanForSpeech(text));
+    speakGuardRef.current = false;
+  }, [speak]);
+
   const {
     messages,
     auditResult,
@@ -600,7 +610,7 @@ export default function SorenOS() {
     runAuditFromChat,
     reset: resetChat,
   } = useSorenChat((replyText) => {
-    void speak(replyText);
+    void speakOnce(replyText);
   });
 
   const handleUserText = async (rawText: string) => {
@@ -638,9 +648,9 @@ export default function SorenOS() {
 
   useEffect(() => {
     if (voiceEnabled && greeting) {
-      speak(GREETING);
+      void speakOnce(GREETING);
     }
-  }, [voiceEnabled, greeting, speak, GREETING]);
+  }, [voiceEnabled, greeting, speakOnce, GREETING]);
 
   useEffect(() => {
     if (isThinking) {
@@ -667,8 +677,8 @@ export default function SorenOS() {
   useEffect(() => {
     if (!auditResult) return;
     const text = buildBriefingText(auditResult as AuditResult);
-    void speak(text);
-  }, [auditResult, speak]);
+    void speakOnce(text);
+  }, [auditResult, speakOnce]);
 
   const orbState: OrbState = isSpeaking
     ? "speaking"
@@ -1150,7 +1160,7 @@ export default function SorenOS() {
                 <div style={{ padding: "16px 16px 20px", display: "flex", flexDirection: "column", gap: 6 }}>
                   {result.checks?.map((check, i) => (
                     <CheckRow key={check.name} check={check} index={i}
-                      openKey={openKey} setOpenKey={setOpenKey} onSpeak={speak} />
+                      openKey={openKey} setOpenKey={setOpenKey} onSpeak={speakOnce} />
                   ))}
                 </div>
 

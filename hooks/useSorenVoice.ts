@@ -4,26 +4,22 @@ import { useCallback, useRef, useState } from 'react';
 const TTS_URL =
   'https://toolkit-demo-host-production-ac14.up.railway.app/api/tts';
 
-interface UseSorenVoiceReturn {
-  speak: (text: string) => Promise<void>;
-  stop: () => void;
-  isSpeaking: boolean;
-  isMuted: boolean;
-  toggleMute: () => void;
-}
-
-export function useSorenVoice(): UseSorenVoiceReturn {
+export function useSorenVoice() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mutedRef = useRef(false);
+  const busyRef = useRef(false);
 
   const stop = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = '';
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      try { audio.src = ''; } catch { /* ignore */ }
       audioRef.current = null;
     }
+    busyRef.current = false;
     setIsSpeaking(false);
   }, []);
 
@@ -32,6 +28,8 @@ export function useSorenVoice(): UseSorenVoiceReturn {
 
     stop();
 
+    busyRef.current = true;
+
     try {
       setIsSpeaking(true);
 
@@ -39,29 +37,48 @@ export function useSorenVoice(): UseSorenVoiceReturn {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(10000),
       });
 
-      if (!res.ok) {
+      if (mutedRef.current || !busyRef.current) {
         setIsSpeaking(false);
         return;
       }
 
+      if (!res.ok) {
+        setIsSpeaking(false);
+        busyRef.current = false;
+        return;
+      }
+
       const blob = await res.blob();
+
+      if (mutedRef.current || !busyRef.current) {
+        setIsSpeaking(false);
+        return;
+      }
+
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
 
       audio.onended = () => {
-        setIsSpeaking(false);
         URL.revokeObjectURL(url);
+        audioRef.current = null;
+        busyRef.current = false;
+        setIsSpeaking(false);
       };
+
       audio.onerror = () => {
-        setIsSpeaking(false);
         URL.revokeObjectURL(url);
+        audioRef.current = null;
+        busyRef.current = false;
+        setIsSpeaking(false);
       };
 
       await audio.play();
     } catch {
+      busyRef.current = false;
       setIsSpeaking(false);
     }
   }, [stop]);
@@ -70,7 +87,9 @@ export function useSorenVoice(): UseSorenVoiceReturn {
     const newMuted = !mutedRef.current;
     mutedRef.current = newMuted;
     setIsMuted(newMuted);
-    if (newMuted) stop();
+    if (newMuted) {
+      stop();
+    }
   }, [stop]);
 
   return { speak, stop, isSpeaking, isMuted, toggleMute };
