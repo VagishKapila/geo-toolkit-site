@@ -500,6 +500,7 @@ export default function SorenOS() {
   const [dockedCards, setDockedCards] = useState<ActionCardData[]>([]);
   const [activeCard, setActiveCard] = useState<ActionCardData | null>(null);
   const [deliveryOption, setDeliveryOption] = useState<DeliveryOption>(null);
+  const [openCheck, setOpenCheck] = useState<string | null>(null);
 
   const speakGuardRef = useRef(false);
   const shownCardForUrl = useRef<string | null>(null);
@@ -632,6 +633,10 @@ export default function SorenOS() {
   const handleUrlConfirm = useCallback(
     async (url: string) => {
       setPendingUrl(null);
+      setOpenCheck(null);
+      setActiveCard(null);
+      setDeliveryOption(null);
+      shownCardForUrl.current = null;
       try {
         setScanDomain(new URL(url).hostname);
       } catch {
@@ -644,7 +649,7 @@ export default function SorenOS() {
     [runAuditFromChat],
   );
 
-  const handleUserText = useCallback(
+  const handleTextSubmit = useCallback(
     async (rawText: string) => {
       const text = rawText.trim();
       if (!text) return;
@@ -654,16 +659,23 @@ export default function SorenOS() {
       const urlMatch = text.match(
         /(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/\S*)?)/i,
       );
-      if (urlMatch && !auditResult) {
-        const rawUrl = urlMatch[0];
-        const normalized = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+      if (urlMatch) {
+        const raw = urlMatch[0];
+        const normalized = raw.startsWith('http') ? raw : `https://${raw}`;
+        clearFixPackage();
+        setOpenCheck(null);
+        setActiveCard(null);
+        setDeliveryOption(null);
+        shownCardForUrl.current = null;
         setPendingUrl(normalized);
+        setDraft('');
         return;
       }
 
       await sendMessage(text);
+      setDraft('');
     },
-    [auditResult, sendMessage],
+    [sendMessage, clearFixPackage],
   );
 
   const {
@@ -673,7 +685,7 @@ export default function SorenOS() {
     stopListening,
     isSupported: isSttSupported,
   } = useSorenSTT((recognizedText) => {
-    void handleUserText(recognizedText);
+    void handleTextSubmit(recognizedText);
   });
 
   const GREETING =
@@ -1069,8 +1081,7 @@ export default function SorenOS() {
                   }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && draft.trim()) {
-                      void handleUserText(draft);
-                      setDraft('');
+                      void handleTextSubmit(draft);
                     }
                   }}
                   placeholder="or type here..."
@@ -1105,7 +1116,7 @@ export default function SorenOS() {
                     cursor: 'pointer',
                   }}
                 >
-                  {sttState === 'listening' ? '■ STOP' : '🎙 SPEAK'}
+                  {sttState === 'listening' ? '⬛ STOP LISTENING' : '🎙 SPEAK'}
                 </button>
                 <button
                   onClick={toggleMute}
@@ -1123,6 +1134,17 @@ export default function SorenOS() {
                   {isMuted ? '🔇' : '🎙'}
                 </button>
               </div>
+              <p
+                style={{
+                  fontSize: 9,
+                  color: HUD.textDim,
+                  marginTop: 8,
+                  textAlign: 'center',
+                  fontFamily: MONO,
+                }}
+              >
+                Speak — Soren listens automatically
+              </p>
               {error && (
                 <p
                   style={{
@@ -1199,7 +1221,7 @@ export default function SorenOS() {
             </div>
           )}
 
-          {auditResult && (
+          {auditResult && phase !== 'scanning' && (
             <div
               style={{
                 border: `1px solid ${HUD.panelBorder}`,
@@ -1241,41 +1263,85 @@ export default function SorenOS() {
               </div>
               <div
                 style={{
-                  padding: '12px 16px',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
+                  display: 'flex',
+                  flexDirection: 'column',
                   gap: 5,
+                  padding: '12px 16px',
                 }}
               >
-                {auditResult.checks?.map((c, i) => (
-                  <div
-                    key={c.name}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 7,
-                      padding: '6px 9px',
-                      borderRadius: 5,
-                      background: c.passed ? 'rgba(52,211,153,0.04)' : 'rgba(248,113,113,0.04)',
-                      border: `1px solid ${c.passed ? 'rgba(52,211,153,0.1)' : 'rgba(248,113,113,0.1)'}`,
-                      animation: `hud-fade-up .3s ease ${i * 35}ms both`,
-                    }}
-                  >
-                    <span style={{ fontSize: 10 }}>{c.passed ? '✅' : '❌'}</span>
-                    <span style={{ flex: 1, fontFamily: 'Inter,sans-serif', fontSize: 11, color: HUD.text }}>
-                      {c.name}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 9,
-                        color: c.passed ? HUD.green : HUD.red,
-                      }}
-                    >
-                      {c.passed ? `+${c.maxPoints}` : `0/${c.maxPoints}`}
-                    </span>
-                  </div>
-                ))}
+                {auditResult.checks?.map((c, i) => {
+                  const isOpen = openCheck === c.name;
+                  return (
+                    <div key={c.name}>
+                      <div
+                        role={c.passed ? undefined : 'button'}
+                        onClick={() => {
+                          if (c.passed) return;
+                          setOpenCheck(isOpen ? null : c.name);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 7,
+                          padding: '6px 9px',
+                          borderRadius: 5,
+                          background: c.passed
+                            ? 'rgba(52,211,153,0.04)'
+                            : 'rgba(248,113,113,0.04)',
+                          border: `1px solid ${c.passed ? 'rgba(52,211,153,0.1)' : isOpen ? HUD.tealFaint : 'rgba(248,113,113,0.1)'}`,
+                          animation: `hud-fade-up .3s ease ${i * 35}ms both`,
+                          cursor: c.passed ? 'default' : 'pointer',
+                        }}
+                      >
+                        <span style={{ fontSize: 10 }}>{c.passed ? '✅' : '❌'}</span>
+                        <span
+                          style={{
+                            flex: 1,
+                            fontFamily: 'Inter,sans-serif',
+                            fontSize: 11,
+                            color: HUD.text,
+                          }}
+                        >
+                          {c.name}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            fontSize: 9,
+                            color: c.passed ? HUD.green : HUD.red,
+                          }}
+                        >
+                          {c.passed ? `+${c.maxPoints}` : `0/${c.maxPoints}`}
+                        </span>
+                      </div>
+                      {!c.passed && isOpen && (
+                        <div
+                          style={{
+                            marginTop: 4,
+                            padding: '10px 12px',
+                            borderRadius: 5,
+                            background: 'rgba(94,234,212,0.04)',
+                            border: `1px solid ${HUD.tealFaint}`,
+                            animation: 'hud-fade-up .2s ease',
+                          }}
+                        >
+                          <p
+                            style={{
+                              fontFamily: 'Inter,sans-serif',
+                              fontSize: 11,
+                              color: HUD.textDim,
+                              lineHeight: 1.6,
+                              margin: 0,
+                            }}
+                          >
+                            {c.tip ||
+                              'This signal helps AI engines understand your site. I can generate the fix for you.'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

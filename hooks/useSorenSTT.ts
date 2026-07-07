@@ -13,6 +13,7 @@ interface SpeechRecognitionResultLike extends ArrayLike<SpeechRecognitionAlterna
 }
 
 interface SpeechRecognitionEventLike {
+  resultIndex: number;
   results: ArrayLike<SpeechRecognitionResultLike>;
 }
 
@@ -83,17 +84,23 @@ export function useSorenSTT(onResult: (text: string) => void): UseSorenSTTReturn
     };
 
     recognition.onresult = (event: SpeechRecognitionEventLike) => {
-      const results = Array.from(event.results);
-      const current = results
-        .map((result) => result[0]?.transcript ?? '')
-        .join('')
-        .trim();
-      setTranscript(current);
+      let interim = '';
+      let final = '';
+      for (let i = 0; i < event.results.length; i++) {
+        const piece = event.results[i]?.[0]?.transcript ?? '';
+        if (event.results[i]?.isFinal) {
+          final += piece;
+        } else {
+          interim += piece;
+        }
+      }
+      const live = (final + interim).trim();
+      setTranscript(live);
 
-      const lastResult = results[results.length - 1];
-      if (lastResult?.isFinal && current.length > 0) {
+      if (final.trim()) {
         setState('processing');
-        onResult(current);
+        recognitionRef.current = null;
+        onResult(final.trim());
       }
     };
 
