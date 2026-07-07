@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const CHAT_URL = 'https://toolkit-demo-host-production-ac14.up.railway.app/api/soren/chat';
 const GEO_URL = 'https://toolkit-demo-host-production-ac14.up.railway.app/api/geo-audit';
+const FIX_URL = 'https://toolkit-demo-host-production-ac14.up.railway.app/api/soren/fix';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -15,7 +16,26 @@ export interface AuditResult {
   score: number;
   grade: string;
   topFixes: string[];
-  checks: { name: string; passed: boolean; maxPoints: number }[];
+  checks: { name: string; passed: boolean; maxPoints: number; tip?: string }[];
+}
+
+export interface FixPackageFile {
+  filename: string;
+  description: string;
+  content: string;
+}
+
+export interface FixPackageStep {
+  title: string;
+  detail: string;
+}
+
+export interface FixPackage {
+  platform: string;
+  summary: string;
+  files: FixPackageFile[];
+  instructions: FixPackageStep[];
+  sorenSays: string;
 }
 
 interface ChatResponsePayload {
@@ -25,15 +45,53 @@ interface ChatResponsePayload {
 interface UseSorenChatReturn {
   messages: ChatMessage[];
   auditResult: AuditResult | null;
+  fixPackage: FixPackage | null;
   isThinking: boolean;
   sendMessage: (text: string) => Promise<string>;
   runAuditFromChat: (url: string) => Promise<void>;
   reset: () => void;
+  clearFixPackage: () => void;
+}
+
+async function requestFix(
+  platform: string,
+  failingChecks: { name: string; tip: string }[],
+  siteUrl: string
+): Promise<FixPackage | null> {
+  try {
+    const res = await fetch(FIX_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        platform,
+        failingChecks,
+        siteInfo: { url: siteUrl },
+      }),
+    });
+    return (await res.json()) as FixPackage;
+  } catch {
+    return null;
+  }
+}
+
+function hasFixIntent(message: string): boolean {
+  const value = message.toLowerCase();
+  return ['yes', 'fix it', 'do it', 'go ahead', 'handle it'].some((term) => value.includes(term));
+}
+
+function inferPlatform(message: string): string {
+  const value = message.toLowerCase();
+  if (value.includes('wordpress')) return 'WordPress Plugin';
+  if (value.includes('next.js') || value.includes('nextjs')) return 'Next.js';
+  if (value.includes('webflow')) return 'Webflow';
+  if (value.includes('shopify')) return 'Shopify';
+  return 'Website';
 }
 
 export function useSorenChat(onReply: (text: string) => void): UseSorenChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
+  const [fixPackage, setFixPackage] = useState<FixPackage | null>(null);
   const [isThinking, setIsThinking] = useState(false);
 
   const auditRef = useRef<AuditResult | null>(null);
@@ -51,6 +109,22 @@ export function useSorenChat(onReply: (text: string) => void): UseSorenChatRetur
       setIsThinking(true);
 
       try {
+        if (auditRef.current && hasFixIntent(text)) {
+          const failingChecks = auditRef.current.checks
+            .filter((check) => !check.passed)
+            .map((check) => ({ name: check.name, tip: check.tip ?? '' }));
+          const pkg = await requestFix(inferPlatform(text), failingChecks, auditRef.current.url);
+          if (pkg) {
+            setFixPackage(pkg);
+            const reply = pkg.sorenSays || 'Fix package ready. Want me to walk you through it?';
+            const assistantMessage: ChatMessage = { role: 'assistant', content: reply };
+            const updatedMessages = [...outgoingMessages, assistantMessage];
+            setMessages(updatedMessages);
+            onReply(reply);
+            return reply;
+          }
+        }
+
         const res = await fetch(CHAT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -124,9 +198,23 @@ export function useSorenChat(onReply: (text: string) => void): UseSorenChatRetur
   const reset = useCallback(() => {
     setMessages([]);
     setAuditResult(null);
+    setFixPackage(null);
     auditRef.current = null;
     messagesRef.current = [];
   }, []);
 
-  return { messages, auditResult, isThinking, sendMessage, runAuditFromChat, reset };
+  const clearFixPackage = useCallback(() => {
+    setFixPackage(null);
+  }, []);
+
+  return {
+    messages,
+    auditResult,
+    fixPackage,
+    isThinking,
+    sendMessage,
+    runAuditFromChat,
+    reset,
+    clearFixPackage,
+  };
 }

@@ -5,6 +5,7 @@ import { useSorenVoice } from "../hooks/useSorenVoice";
 import { useSorenSTT } from "../hooks/useSorenSTT";
 import { useSorenChat } from "../hooks/useSorenChat";
 import { cleanForSpeech } from "../lib/cleanForSpeech";
+import { FixPackage } from "../components/FixPackage";
 
 type CheckInfo = { label: string; icon: string; brief: string; detail: string; sorenSays: string };
 type AuditCheck = { name: string; passed: boolean; points?: number; maxPoints: number; tip?: string };
@@ -605,10 +606,12 @@ export default function SorenOS() {
   const {
     messages,
     auditResult,
+    fixPackage,
     isThinking,
     sendMessage,
     runAuditFromChat,
     reset: resetChat,
+    clearFixPackage,
   } = useSorenChat((replyText) => {
     void speakOnce(replyText);
   });
@@ -1061,6 +1064,7 @@ export default function SorenOS() {
                         setOpenKey(null);
                         setError("");
                         setActiveInput("");
+                        clearFixPackage();
                       }}
                       style={{
                         background: "transparent",
@@ -1245,7 +1249,7 @@ export default function SorenOS() {
 
               {/* Scan again */}
               <div style={{ textAlign: "center", marginTop: 20 }}>
-                <button onClick={() => { setPhase("idle"); setResult(null); setDraft(""); setOpenKey(null); resetChat(); setActiveInput(""); }}
+                <button onClick={() => { setPhase("idle"); setResult(null); setDraft(""); setOpenKey(null); resetChat(); setActiveInput(""); clearFixPackage(); }}
                   style={{
                     background: "transparent", border: `1px solid ${C.border}`,
                     color: C.gray, padding: "8px 20px", borderRadius: 8,
@@ -1255,6 +1259,17 @@ export default function SorenOS() {
                   ← Scan another site
                 </button>
               </div>
+            </div>
+          </section>
+        )}
+
+        {fixPackage && (
+          <section style={{ padding: "0 40px 40px" }}>
+            <div style={{ maxWidth: 700, margin: "0 auto" }}>
+              <FixPackage
+                pkg={fixPackage}
+                onClose={() => clearFixPackage()}
+              />
             </div>
           </section>
         )}
