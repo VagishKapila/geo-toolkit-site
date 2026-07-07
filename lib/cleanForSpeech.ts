@@ -1,7 +1,9 @@
 export function cleanForSpeech(text: string): string {
   return text
-    .replace(/robots\.txt/gi, 'your robots file')
-    .replace(/llms\.txt/gi, 'your A I guide file')
+    .replace(/\byour\s+robots\.txt/gi, 'your robots file')
+    .replace(/robots\.txt/gi, 'robots file')
+    .replace(/\byour\s+llms\.txt/gi, 'your AI guide file')
+    .replace(/llms\.txt/gi, 'AI guide file')
     .replace(/sitemap\.xml/gi, 'your sitemap')
     .replace(/sitemap/gi, 'sitemap')
     .replace(/\.txt\b/gi, ' text file')
