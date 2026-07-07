@@ -18,6 +18,11 @@ const C = {
 interface FixPackageProps {
   pkg: FixPackageType;
   onClose: () => void;
+  onApplyFix: () => Promise<void>;
+  isApplying: boolean;
+  applyError: string | null;
+  creditsBalance: number;
+  downloadsUnlocked: boolean;
 }
 
 function SmallSorenOrb(): JSX.Element {
@@ -43,7 +48,15 @@ function SmallSorenOrb(): JSX.Element {
   );
 }
 
-export function FixPackage({ pkg, onClose }: FixPackageProps): JSX.Element {
+export function FixPackage({
+  pkg,
+  onClose,
+  onApplyFix,
+  isApplying,
+  applyError,
+  creditsBalance,
+  downloadsUnlocked,
+}: FixPackageProps): JSX.Element {
   const downloadFile = useCallback((filename: string, content: string) => {
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const blobUrl = URL.createObjectURL(blob);
@@ -189,20 +202,21 @@ export function FixPackage({ pkg, onClose }: FixPackageProps): JSX.Element {
               </div>
               <button
                 onClick={() => downloadFile(file.filename, file.content)}
+                disabled={!downloadsUnlocked}
                 style={{
                   alignSelf: 'flex-start',
-                  background: 'rgba(168,85,247,0.2)',
-                  border: '1px solid rgba(168,85,247,0.4)',
-                  color: '#e9d7ff',
+                  background: downloadsUnlocked ? 'rgba(168,85,247,0.2)' : 'rgba(42,21,69,0.5)',
+                  border: `1px solid ${downloadsUnlocked ? 'rgba(168,85,247,0.4)' : 'rgba(42,21,69,0.8)'}`,
+                  color: downloadsUnlocked ? '#e9d7ff' : '#6B5B8A',
                   borderRadius: 8,
                   padding: '6px 10px',
                   fontFamily: "'Inter',sans-serif",
                   fontSize: 12,
                   fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: downloadsUnlocked ? 'pointer' : 'not-allowed',
                 }}
               >
-                Download
+                {downloadsUnlocked ? 'Download' : 'Apply fix to unlock'}
               </button>
             </div>
           ))}
@@ -306,22 +320,35 @@ export function FixPackage({ pkg, onClose }: FixPackageProps): JSX.Element {
           gap: 8,
         }}
       >
-        <div
-          style={{
-            color: C.gray,
-            fontFamily: "'Inter',sans-serif",
-            fontSize: 12,
-          }}
-        >
-          This fix uses 5 Soren Credits (~$1)
-        </div>
+        {creditsBalance > 0 ? (
+          <div
+            style={{
+              color: '#4ADE80',
+              fontFamily: "'Inter',sans-serif",
+              fontSize: 12,
+            }}
+          >
+            Your balance: {creditsBalance} credits
+          </div>
+        ) : (
+          <div
+            style={{
+              color: C.gray,
+              fontFamily: "'Inter',sans-serif",
+              fontSize: 12,
+            }}
+          >
+            Your first fix: $1
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
-            onClick={() => {
-              alert('Coming soon — credits launching this week');
-            }}
+            onClick={() => void onApplyFix()}
+            disabled={isApplying}
             style={{
-              background: `linear-gradient(135deg, ${C.indigo}, ${C.purple}, ${C.pink})`,
+              background: creditsBalance >= 5
+                ? `linear-gradient(135deg, ${C.indigo}, ${C.purple}, ${C.pink})`
+                : C.indigo,
               border: 'none',
               color: '#fff',
               borderRadius: 9,
@@ -329,10 +356,31 @@ export function FixPackage({ pkg, onClose }: FixPackageProps): JSX.Element {
               fontFamily: "'Space Grotesk',sans-serif",
               fontSize: 13,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: isApplying ? 'wait' : 'pointer',
+              opacity: isApplying ? 0.8 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
             }}
           >
-            Apply Fix — 5 Credits
+            {isApplying && (
+              <span
+                style={{
+                  width: 14,
+                  height: 14,
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  borderTopColor: '#fff',
+                  borderRadius: '50%',
+                  display: 'inline-block',
+                  animation: 'spin 0.8s linear infinite',
+                }}
+              />
+            )}
+            {isApplying
+              ? 'Applying...'
+              : creditsBalance >= 5
+                ? 'Apply Fix — 5 Credits'
+                : 'Buy 5 Credits — $1'}
           </button>
           <button
             onClick={onClose}
@@ -350,7 +398,19 @@ export function FixPackage({ pkg, onClose }: FixPackageProps): JSX.Element {
             I&apos;ll do it myself
           </button>
         </div>
+        {applyError && (
+          <div
+            style={{
+              color: '#F87171',
+              fontFamily: "'Inter',sans-serif",
+              fontSize: 12,
+            }}
+          >
+            {applyError}
+          </div>
+        )}
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

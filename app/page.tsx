@@ -4,8 +4,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useSorenVoice } from "../hooks/useSorenVoice";
 import { useSorenSTT } from "../hooks/useSorenSTT";
 import { useSorenChat } from "../hooks/useSorenChat";
+import { useCredits } from "../hooks/useCredits";
 import { cleanForSpeech } from "../lib/cleanForSpeech";
 import { FixPackage } from "../components/FixPackage";
+import { EmailGate } from "../components/EmailGate";
 
 type CheckInfo = { label: string; icon: string; brief: string; detail: string; sorenSays: string };
 type AuditCheck = { name: string; passed: boolean; points?: number; maxPoints: number; tip?: string };
@@ -592,6 +594,10 @@ export default function SorenOS() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [scanDomain, setScanDomain] = useState("");
   const [activeInput, setActiveInput] = useState("");
+  const [showEmailGate, setShowEmailGate] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const [fixApplied, setFixApplied] = useState(false);
   const resultRef = useRef<HTMLElement | null>(null);
   const speakGuardRef = useRef(false);
   const { speak, isSpeaking, isMuted, toggleMute } = useSorenVoice();
@@ -615,6 +621,93 @@ export default function SorenOS() {
   } = useSorenChat((replyText) => {
     void speakOnce(replyText);
   });
+
+  const {
+    email,
+    balance,
+    isLoading: creditsLoading,
+    saveEmail,
+    fetchBalance,
+    startCheckout,
+    deductCredits,
+  } = useCredits();
+
+  const handleApplyFix = useCallback(async (overrideEmail?: string) => {
+    setApplyError(null);
+    const userEmail = overrideEmail ?? email;
+
+    if (!userEmail) {
+      setShowEmailGate(true);
+      return;
+    }
+
+    if (overrideEmail) {
+      saveEmail(overrideEmail);
+    }
+
+    const currentBalance = await fetchBalance(userEmail);
+
+    if (currentBalance < 5) {
+      await startCheckout(userEmail, 5, auditResult?.url ?? "");
+      return;
+    }
+
+    setIsApplying(true);
+    const success = await deductCredits(
+      userEmail,
+      5,
+      `Fix for ${auditResult?.url ?? "site"}`,
+    );
+
+    if (success) {
+      setFixApplied(true);
+      void speakOnce(
+        "Done. Your fix package is ready to download. " +
+        "Apply it and run the audit again. " +
+        "I will check your score.",
+      );
+    } else {
+      await startCheckout(userEmail, 5, auditResult?.url ?? "");
+    }
+    setIsApplying(false);
+  }, [
+    email,
+    saveEmail,
+    fetchBalance,
+    startCheckout,
+    deductCredits,
+    auditResult?.url,
+    speakOnce,
+  ]);
+
+  useEffect(() => {
+    if (email) {
+      void fetchBalance(email);
+    }
+  }, [email, fetchBalance]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("credits_success") !== "true") return;
+
+    const urlEmail = params.get("email");
+    if (urlEmail) {
+      saveEmail(urlEmail);
+      void fetchBalance(urlEmail).then(() => {
+        void speakOnce(
+          "Your credits are ready. Want me to apply the fix now?",
+        );
+      });
+    }
+
+    window.history.replaceState({}, "", window.location.pathname);
+  }, [saveEmail, fetchBalance, speakOnce]);
+
+  useEffect(() => {
+    if (!fixPackage) {
+      setFixApplied(false);
+    }
+  }, [fixPackage]);
 
   const handleUserText = async (rawText: string) => {
     const text = rawText.trim();
@@ -1266,9 +1359,25 @@ export default function SorenOS() {
         {fixPackage && (
           <section style={{ padding: "0 40px 40px" }}>
             <div style={{ maxWidth: 700, margin: "0 auto" }}>
+              {showEmailGate && (
+                <div style={{ marginBottom: 16 }}>
+                  <EmailGate
+                    isLoading={creditsLoading}
+                    onSubmit={(e) => {
+                      setShowEmailGate(false);
+                      void handleApplyFix(e);
+                    }}
+                  />
+                </div>
+              )}
               <FixPackage
                 pkg={fixPackage}
                 onClose={() => clearFixPackage()}
+                onApplyFix={handleApplyFix}
+                isApplying={isApplying}
+                applyError={applyError}
+                creditsBalance={balance}
+                downloadsUnlocked={fixApplied}
               />
             </div>
           </section>
