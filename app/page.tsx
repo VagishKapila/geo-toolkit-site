@@ -740,7 +740,7 @@ export default function SorenOS() {
               display: "flex", alignItems: "center", gap: 6,
               transition: "all 0.2s",
             }}>
-              {isMuted ? "🔇 Muted" : "🔊 Soren"}
+              {isMuted ? "🔇 Muted" : "🔊 Sound on"}
             </button>
             <button style={{
               background: sorenGradient, border: "none",
@@ -996,11 +996,48 @@ export default function SorenOS() {
                         color: sttState === "listening" ? C.cyan : C.text,
                         cursor: "pointer",
                         fontSize: 17,
+                        flexShrink: 0,
                       }}
                       title={sttState === "listening" ? "Stop listening" : "Start listening"}
                     >
                       🎙️
                     </button>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                      <button
+                        onClick={toggleMute}
+                        title={isMuted ? "Unmute Soren" : "Mute Soren"}
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: "50%",
+                          background: isMuted
+                            ? "rgba(248,113,113,0.15)"
+                            : "rgba(255,255,255,0.08)",
+                          border: `1px solid ${isMuted
+                            ? "rgba(248,113,113,0.4)"
+                            : "rgba(255,255,255,0.15)"}`,
+                          color: isMuted ? "#F87171" : "#9CA3AF",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 18,
+                          flexShrink: 0,
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        {isMuted ? "🔇" : "🔊"}
+                      </button>
+                      <div style={{
+                        fontSize: 10,
+                        color: "rgba(255,255,255,0.4)",
+                        textAlign: "center",
+                        marginTop: 4,
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}>
+                        {isMuted ? "muted" : "sound on"}
+                      </div>
+                    </div>
                     <button
                       onClick={() => setShowTextInput((prev) => !prev)}
                       style={{
