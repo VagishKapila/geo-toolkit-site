@@ -25,3 +25,44 @@ body {
     text-wrap: balance;
   }
 }
+
+:root {
+  --bg:     #02070b;
+  --panel:  rgba(5,16,22,.78);
+  --text:   #f7fcff;
+  --muted:  #93aab4;
+  --line:   rgba(91,228,255,.26);
+  --cyan:   #4deaff;
+  --pink:   #ff5fd2;
+  --orange: #ffb14a;
+  --green:  #63ffa3;
+  --red:    #ff6070;
+  --purple: #9b6cff;
+  --yellow: #ffe19a;
+}
+
+@keyframes soren-wave {
+  50% { opacity: .38; transform: scaleY(.42); }
+}
+@keyframes soren-card-in {
+  from { opacity:0; transform:translateY(-10px) scale(.97); }
+  to   { opacity:1; transform:none; }
+}
+@keyframes soren-fade-up {
+  from { opacity:0; transform:translateY(8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes soren-countdown {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
+@media (max-width: 1000px) {
+  .soren-neural-grid {
+    grid-template-columns: 1fr !important;
+    overflow-y: auto !important;
+  }
+  .soren-neural-core {
+    min-height: 420px !important;
+  }
+}
