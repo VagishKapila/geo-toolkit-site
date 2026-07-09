@@ -1,2 +1,5 @@
 allowBuilds:
   unrs-resolver: true
+minimumReleaseAgeExclude:
+  - '@livekit/components-core@0.12.14'
+  - '@livekit/components-react@2.9.23'

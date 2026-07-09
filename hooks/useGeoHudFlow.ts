@@ -1,23 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useVoiceAssistant, useSession } from '@livekit/components-react';
 import type { Room } from 'livekit-client';
 import { useHudLog } from '@/hooks/useHudLog';
-import { useSorenEvents, type SorenEvent } from '@/hooks/useSorenEvents';
-import { resolveBrainMode } from '@/lib/brainMode';
-import {
-  sessionStatusLabel,
-  type RailStep,
-} from '@/lib/geoMetrics';
+import { useSorenEvents, type SorenEvent } from '@/lib/soren-voice/use-soren-events';
+import { type RailStep } from '@/lib/geoMetrics';
 import { runAudit, type GeoAudit } from '@/lib/geoApi';
 
 export type HudPhase = 'input' | 'confirm' | 'scanning' | 'result';
 
-export function useGeoHudFlow(
-  session: ReturnType<typeof useSession>,
-  room: Room,
-) {
+export function useGeoHudFlow(room: Room) {
   const { lines, append } = useHudLog();
   const [phase, setPhase] = useState<HudPhase>('input');
   const [railStep, setRailStep] = useState<RailStep>('input');
@@ -29,10 +21,6 @@ export function useGeoHudFlow(
   const [error, setError] = useState<string | null>(null);
   const [voiceRequestedFix, setVoiceRequestedFix] = useState(false);
   const [showMaster, setShowMaster] = useState(false);
-
-  const { state: agentState } = useVoiceAssistant();
-  const connected = session.isConnected;
-  const status = sessionStatusLabel(connected, agentState);
 
   const beginScan = useCallback(async (target: string) => {
     setPhase('scanning');
@@ -109,13 +97,6 @@ export function useGeoHudFlow(
     append('Reset complete. Ready for website input.');
   }, [append]);
 
-  const brainMode = resolveBrainMode(
-    phase,
-    agentState,
-    connected,
-    voiceRequestedFix,
-  );
-
   const goToInput = useCallback(() => {
     setPhase('input');
     setRailStep('input');
@@ -140,10 +121,6 @@ export function useGeoHudFlow(
     voiceRequestedFix,
     showMaster,
     setShowMaster,
-    connected,
-    status,
-    agentState,
-    brainMode,
     beginScan,
     startConfirm,
     resetAll,

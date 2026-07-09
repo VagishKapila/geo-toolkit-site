@@ -1,9 +1,6 @@
 'use client';
 
-import { useSession } from '@livekit/components-react';
-import type { Room } from 'livekit-client';
 import '@/app/geo-hud.css';
-import { AudioUnlockButton } from '@/components/AudioUnlockButton';
 import AuditResults from '@/components/AuditResults';
 import { GeoConfirmScreen } from '@/components/geo/GeoConfirmScreen';
 import { GeoInputScreen } from '@/components/geo/GeoInputScreen';
@@ -15,40 +12,25 @@ import { HudTopBar } from '@/components/geo/HudTopBar';
 import { StepRail } from '@/components/geo/StepRail';
 import { useCredits } from '@/hooks/useCredits';
 import { useGeoHudFlow } from '@/hooks/useGeoHudFlow';
-import { useWakeTrigger } from '@/hooks/useWakeTrigger';
+import { resolveBrainMode } from '@/lib/brainMode';
+import { useSorenVoice } from '@/lib/soren-voice/soren-voice-provider';
+import { useSorenChatLog } from '@/lib/soren-voice/use-soren-chat-log';
 
-interface Props {
-  session: ReturnType<typeof useSession>;
-  room: Room;
-}
-
-async function unlockAudioContext() {
-  try {
-    const AC =
-      window.AudioContext
-      || (window as Window & { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (!AC) return;
-    const ctx = new AC();
-    await ctx.resume();
-    ctx.close();
-  } catch {
-    /* best-effort */
-  }
-}
-
-export default function GeoHud({ session, room }: Props) {
+export default function GeoHud() {
   const { email } = useCredits();
-  const flow = useGeoHudFlow(session, room);
-  useWakeTrigger(room);
+  const voice = useSorenVoice();
+  const flow = useGeoHudFlow(voice.room);
+  useSorenChatLog(flow.append);
 
-  const handleTalk = () => {
-    void unlockAudioContext().then(() => session.start());
-    flow.append('Connecting to Soren voice…');
-  };
+  const brainMode = resolveBrainMode(
+    flow.phase,
+    voice.rawAgentState,
+    voice.isConnected,
+    flow.voiceRequestedFix,
+  );
 
-  const modeLine = flow.connected
-    ? `● ${flow.status}`
+  const modeLine = voice.isConnected
+    ? `● ${voice.agentBadge}`
     : '● AWAITING WEBSITE';
 
   const timerLabel =
@@ -64,14 +46,13 @@ export default function GeoHud({ session, room }: Props) {
 
   return (
     <div className="geo-hud-app">
-      <AudioUnlockButton />
-      <HudTopBar status={flow.status} onHome={flow.resetAll} />
+      <HudTopBar status={voice.statusLabel} onHome={flow.resetAll} />
       <main className="main">
         <HudLeftPanel
-          brainMode={flow.brainMode}
+          brainMode={brainMode}
           modeLine={modeLine}
-          connected={flow.connected}
-          onTalk={handleTalk}
+          connected={voice.isConnected}
+          onTalk={voice.activate}
           onTypedStart={() => {
             if (flow.url.trim()) flow.startConfirm(flow.url);
             else flow.goToInput();

@@ -16,7 +16,7 @@ type Phase = 'input' | 'confirm' | 'scanning' | 'result';
 
 export function resolveBrainMode(
   phase: Phase,
-  agentState: AgentState,
+  agentState: AgentState | string | undefined,
   connected: boolean,
   voiceRequestedFix: boolean,
 ): BrainMode {
