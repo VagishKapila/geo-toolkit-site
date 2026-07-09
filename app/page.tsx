@@ -3,9 +3,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SorenBrain, type BrainMode } from '../components/SorenBrain';
 import { FixDeliveryCards } from '../components/FixDeliveryCards';
-import { useLiveKitSoren } from '../hooks/useLiveKitSoren';
+import { useSorenVoice } from '../hooks/useSorenVoice';
+import { useSorenSTT } from '../hooks/useSorenSTT';
+import { useSorenChat } from '../hooks/useSorenChat';
 import { useCredits } from '../hooks/useCredits';
 import { cleanForSpeech } from '../lib/cleanForSpeech';
+import { extractWebsiteFromSpeech } from '../lib/extractWebsiteFromSpeech';
 
 const GEO_URL =
   'https://toolkit-demo-host-production-ac14.up.railway.app/api/geo-audit';
@@ -42,7 +45,56 @@ function displayUrl(url: string): string {
   return url.replace(/^https?:\/\//, '');
 }
 
+const CHECK_INFO: Record<string, { plain: string; why: string }> = {
+  'llms.txt': {
+    plain: "AI engines can't find your product guide",
+    why: 'ChatGPT looks for llms.txt first. Without it, AI guesses what your product does — and guessing leads to wrong answers.',
+  },
+  'robots.txt AI crawlers': {
+    plain: "You're blocking AI from reading your site",
+    why: "Your robots file doesn't allow GPTBot, ClaudeBot, or PerplexityBot. They treat your site as off-limits.",
+  },
+  'JSON-LD script': {
+    plain: "AI doesn't know what type of product you are",
+    why: 'Without structured data, AI has to guess your business category, your company name, and what you do.',
+  },
+  'Open Graph tags': {
+    plain: 'Your site shows blank when shared',
+    why: 'Open Graph tags control how your link appears in Slack, LinkedIn, and iMessage. AI also uses these to understand your page.',
+  },
+  'Twitter card tag': {
+    plain: 'Missing social sharing signal',
+    why: 'The Twitter card tag signals that your content is meant to be shared. AI uses this as a trust signal.',
+  },
+  'Heading structure': {
+    plain: "AI can't understand your page structure",
+    why: "AI uses heading tags like a book's table of contents. Without them AI reads your page but can't organize what it learned.",
+  },
+  'sitemap.xml': {
+    plain: 'AI crawlers are missing your key pages',
+    why: 'A sitemap tells AI crawlers exactly which pages exist. Without one they may miss your most important content.',
+  },
+  'Canonical link': {
+    plain: 'AI may be reading duplicate versions of your site',
+    why: 'Without a canonical tag AI may index multiple versions of the same page with conflicting information.',
+  },
+  'Schema.org entity': {
+    plain: "AI doesn't know who built this product",
+    why: 'Schema markup connects your product to your company. This is how you get cited as a trustworthy source.',
+  },
+};
+
 export default function SorenApp() {
+  const { speak, speakAndWait, stop, isSpeaking, isMuted, toggleMute } = useSorenVoice();
+
+  const speakOnce = useCallback((text: string) => {
+    speak(cleanForSpeech(text));
+  }, [speak]);
+
+  const { sendMessage } = useSorenChat((reply: string) => {
+    speakOnce(reply);
+  });
+
   const { email, balance, saveEmail, fetchBalance } = useCredits();
 
   const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
@@ -56,20 +108,10 @@ export default function SorenApp() {
   const [editDraft, setEditDraft] = useState('');
   const [confirmSeconds, setConfirmSeconds] = useState(5);
   const [showFix, setShowFix] = useState(false);
+  const [fixLoading, setFixLoading] = useState(false);
   const [openCheck, setOpenCheck] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([INTRO]);
   const confirmTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const lk = useLiveKitSoren((s) => {
-    if (s === 'speaking') setBrainMode('speaking');
-    if (s === 'listening') {
-      setBrainMode((prev) =>
-        prev === 'results' || prev === 'repair' || prev === 'scanning'
-          ? prev
-          : 'idle',
-      );
-    }
-  });
 
   const appendLog = useCallback((text: string) => {
     setLogs((prev) => [...prev, text]);
@@ -133,6 +175,7 @@ export default function SorenApp() {
   );
 
   const beginConfirm = useCallback((raw: string) => {
+    stopListeningRef.current?.();
     resetAudit();
     clearFixPackage();
     setShowFix(false);
@@ -146,7 +189,48 @@ export default function SorenApp() {
     setBrainMode('confirming');
     const line = `I heard ${displayUrl(url)}. I will start in five seconds unless you edit it.`;
     appendLog(line);
-  }, [appendLog, resetAudit, clearFixPackage]);
+    speakOnce(line);
+  }, [appendLog, resetAudit, clearFixPackage, speakOnce]);
+
+  const restartListeningRef = useRef<(() => void) | null>(null);
+  const stopListeningRef = useRef<(() => void) | null>(null);
+
+  const handleSTTResult = useCallback(
+    async (text: string) => {
+      appendLog(`I heard: "${text}"`);
+      const website = extractWebsiteFromSpeech(text);
+      if (website) {
+        beginConfirm(website);
+        return;
+      }
+      setBrainMode('thinking');
+      appendLog('Thinking...');
+      await sendMessage(text);
+      restartListeningRef.current?.();
+    },
+    [beginConfirm, sendMessage, appendLog],
+  );
+
+  const stt = useSorenSTT(handleSTTResult);
+  restartListeningRef.current = stt.startListening;
+  stopListeningRef.current = stt.stopListening;
+
+  const handleMicClick = useCallback(async () => {
+    if (stt.state === 'listening') {
+      stt.stopListening();
+      return;
+    }
+    stop();
+    stt.stopListening();
+    try {
+      appendLog('Say the website — for example, att.com');
+      await speakAndWait('Say the website.');
+      stt.startListening();
+    } catch (e) {
+      console.error('[MIC]', e);
+      appendLog('Microphone error. Check browser permissions.');
+    }
+  }, [stt, stop, appendLog, speakAndWait]);
 
   useEffect(() => {
     if (!pendingUrl || editOpen) {
@@ -169,16 +253,12 @@ export default function SorenApp() {
   }, [pendingUrl, editOpen, handleUrlConfirm, clearConfirmTimer]);
 
   useEffect(() => {
-    if (lk.state === 'speaking') {
+    if (isSpeaking) {
       setBrainMode('speaking');
       return;
     }
-    if (lk.state === 'listening' && lk.isConnected) {
-      setBrainMode((prev) =>
-        prev === 'results' || prev === 'repair' || prev === 'scanning'
-          ? prev
-          : 'listening',
-      );
+    if (stt.state === 'listening') {
+      setBrainMode('listening');
       return;
     }
     if (pendingUrl && !auditResult) {
@@ -199,7 +279,7 @@ export default function SorenApp() {
       return 'idle';
     });
   }, [
-    lk.state, lk.isConnected, isThinking, auditResult,
+    isSpeaking, stt.state, isThinking, auditResult,
     showFix, pendingUrl, editOpen,
   ]);
 
@@ -261,21 +341,61 @@ export default function SorenApp() {
     beginConfirm(draft.trim());
   }, [draft, beginConfirm]);
 
-  const handleFixIt = useCallback(() => {
+  const handleFixIt = useCallback(async () => {
     if (!auditResult) return;
-    setShowFix(true);
-    setBrainMode('repair');
-    appendLog('Master Repair Plan ready. Choose how you want to proceed.');
-  }, [auditResult, appendLog]);
+
+    if (fixPackage) {
+      setShowFix(true);
+      setBrainMode('repair');
+      appendLog('Master Repair Plan ready. Choose how you want to proceed.');
+      speakOnce('I have your repair plan ready. Choose how you would like to proceed.');
+      return;
+    }
+
+    setFixLoading(true);
+    try {
+      const failing = (auditResult.checks ?? [])
+        .filter((c) => !c.passed)
+        .map((c) => ({
+          name: c.name,
+          tip: c.tip ?? c.name,
+        }));
+
+      const ar = auditResult as AuditWithPlatform;
+      const res = await fetch(FIX_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: ar.platform ?? 'static-html',
+          failingChecks: failing,
+          siteInfo: { url: auditResult.url },
+        }),
+      });
+      const pkg = await res.json();
+      if (pkg?.files) restoreFixPackage(pkg);
+      setShowFix(true);
+      setBrainMode('repair');
+      appendLog('Master Repair Plan ready. Choose how you want to proceed.');
+      speakOnce('I have your repair plan ready. Choose how you would like to proceed.');
+    } catch (e) {
+      console.error('[FIX]', e);
+      appendLog('I could not build the repair plan. Please try again.');
+    } finally {
+      setFixLoading(false);
+    }
+  }, [auditResult, fixPackage, restoreFixPackage, appendLog, speakOnce]);
 
   const toggleCheck = useCallback((name: string, tip: string, passed: boolean) => {
     setOpenCheck((prev) => (prev === name ? null : name));
-    if (!passed && tip) appendLog(tip);
-  }, [appendLog]);
+    if (!passed && tip) {
+      appendLog(tip);
+      speakOnce(tip);
+    }
+  }, [appendLog, speakOnce]);
 
-  const speakLog = useCallback((text: string) => {
-    appendLog(cleanForSpeech(text));
-  }, [appendLog]);
+  const speakForCards = useCallback((text: string) => {
+    speakOnce(text);
+  }, [speakOnce]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -285,7 +405,7 @@ export default function SorenApp() {
       if (urlEmail) {
         saveEmail(urlEmail);
         void fetchBalance(urlEmail).then(() => {
-          appendLog('Your credits are ready. Want me to apply the fix now?');
+          speakOnce('Your credits are ready. Want me to apply the fix now?');
         });
       }
       const pending = sessionStorage.getItem('soren_pending_fix');
@@ -315,6 +435,7 @@ export default function SorenApp() {
             a.click();
             URL.revokeObjectURL(url);
             appendLog('Your AI package is downloading. Paste the prompt into ChatGPT.');
+            speakOnce('Your AI package is downloading. Paste the prompt into ChatGPT.');
           });
       }
     }
@@ -324,17 +445,17 @@ export default function SorenApp() {
       window.history.replaceState({}, '', window.location.pathname);
       window.open(decodeURIComponent(calendly), '_blank');
       appendLog('Payment confirmed. Your booking page just opened.');
+      speakOnce('Payment confirmed. Your booking page just opened.');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const voiceButton = !lk.isConnected ? (
+  const voiceButton = (
     <button
       type="button"
-      onClick={() => void lk.connect()}
+      onClick={() => void handleMicClick()}
       style={{
         width: '100%',
-        border: 0,
         borderRadius: 16,
         padding: 14,
         fontWeight: 800,
@@ -343,53 +464,17 @@ export default function SorenApp() {
         textTransform: 'uppercase' as const,
         fontSize: 13,
         marginBottom: 8,
-        background: 'linear-gradient(135deg,var(--cyan),#91f9ff)',
-        color: '#041014',
+        background: stt.state === 'listening'
+          ? 'rgba(255,95,210,.2)'
+          : 'linear-gradient(135deg,var(--cyan),#91f9ff)',
+        color: stt.state === 'listening' ? 'var(--pink)' : '#041014',
+        border: stt.state === 'listening'
+          ? '1px solid rgba(255,95,210,.5)'
+          : '0',
       }}
     >
-      {lk.state === 'connecting' ? '⟳ Connecting...' : '▶ Talk to Soren'}
+      {stt.state === 'listening' ? '🎙 Listening — speak naturally' : '▶ Talk to Soren'}
     </button>
-  ) : (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-      <button
-        type="button"
-        onClick={lk.disconnect}
-        style={{
-          flex: 1,
-          borderRadius: 16,
-          padding: 14,
-          fontWeight: 800,
-          cursor: 'pointer',
-          fontSize: 13,
-          background: lk.state === 'speaking'
-            ? 'rgba(99,255,163,.15)'
-            : 'rgba(255,95,210,.15)',
-          border: `1px solid ${lk.state === 'speaking'
-            ? 'rgba(99,255,163,.5)'
-            : 'rgba(255,95,210,.5)'}`,
-          color: lk.state === 'speaking' ? 'var(--green)' : 'var(--pink)',
-        }}
-      >
-        {lk.state === 'speaking'
-          ? '● Soren speaking'
-          : '🎙 Listening — speak naturally'}
-      </button>
-      <button
-        type="button"
-        onClick={() => void lk.toggleMute()}
-        style={{
-          padding: '14px 16px',
-          border: '1px solid var(--line)',
-          borderRadius: 16,
-          background: 'rgba(255,255,255,.04)',
-          color: lk.isMuted ? 'var(--red)' : 'var(--muted)',
-          cursor: 'pointer',
-          fontSize: 16,
-        }}
-      >
-        {lk.isMuted ? '🔇' : '🎙'}
-      </button>
-    </div>
   );
 
   const findings = auditResult?.checks?.map((c, i) => ({
@@ -476,16 +561,14 @@ export default function SorenApp() {
                 credits
               </span>
             )}
-            {lk.isConnected && (
-              <button
-                type="button"
-                onClick={() => void lk.toggleMute()}
-                className="soren-pill"
-                style={{ cursor: 'pointer', color: lk.isMuted ? 'var(--red)' : 'var(--green)' }}
-              >
-                {lk.isMuted ? '🔇 Muted' : '🔊 Sound'}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={toggleMute}
+              className="soren-pill"
+              style={{ cursor: 'pointer', color: isMuted ? 'var(--red)' : 'var(--green)' }}
+            >
+              {isMuted ? '🔇 Muted' : '🔊 Sound'}
+            </button>
             <span className="soren-pill soren-pill-live">
               ●
               {' '}
@@ -562,7 +645,7 @@ export default function SorenApp() {
                 placeholder="varshyl.com"
               />
               {voiceButton}
-              {lk.error && (
+              {!stt.isSupported && (
                 <p style={{
                   fontSize: 11,
                   color: 'var(--red)',
@@ -570,9 +653,7 @@ export default function SorenApp() {
                   margin: '4px 0 8px',
                 }}
                 >
-                  ⚠
-                  {' '}
-                  {lk.error}
+                  ⚠ Voice input needs Chrome or Safari
                 </p>
               )}
               <button
@@ -605,14 +686,17 @@ export default function SorenApp() {
                     <button
                       type="button"
                       className="soren-btn soren-btn-primary"
-                      onClick={() => void lk.connect()}
+                      onClick={() => void handleMicClick()}
                     >
                       Start voice flow
                     </button>
                     <button
                       type="button"
                       className="soren-btn soren-btn-ghost"
-                      onClick={() => appendLog(INTRO)}
+                      onClick={() => {
+                        speakOnce(INTRO);
+                        appendLog(INTRO);
+                      }}
                     >
                       Hear Soren intro
                     </button>
@@ -705,11 +789,11 @@ export default function SorenApp() {
                                   {c.passed ? 'This signal looks good.' : `${c.name} needs attention.`}
                                 </h3>
                                 <p style={{ margin: '0 0 12px', color: '#d9fff5', lineHeight: 1.45 }}>
-                                  {c.tip ?? 'No additional notes for this check.'}
+                                  {CHECK_INFO[c.name]?.plain ?? c.tip ?? 'No additional notes for this check.'}
                                 </p>
                                 {!c.passed && (
                                   <div className="soren-quote">
-                                    “I can generate the exact files and instructions to fix this.”
+                                    {CHECK_INFO[c.name]?.why ?? c.tip ?? 'I can generate the exact files and instructions to fix this.'}
                                   </div>
                                 )}
                                 <div className="soren-detail-actions">
@@ -717,9 +801,10 @@ export default function SorenApp() {
                                     <button
                                       type="button"
                                       className="soren-btn soren-btn-primary"
-                                      onClick={handleFixIt}
+                                      onClick={() => void handleFixIt()}
+                                      disabled={fixLoading}
                                     >
-                                      Fix this
+                                      {fixLoading ? 'Building plan…' : 'Fix this with Soren →'}
                                     </button>
                                   )}
                                   <button
@@ -744,9 +829,10 @@ export default function SorenApp() {
                         type="button"
                         className="soren-btn soren-btn-primary"
                         style={{ width: '100%' }}
-                        onClick={handleFixIt}
+                        onClick={() => void handleFixIt()}
+                        disabled={!auditResult || fixLoading}
                       >
-                        ✦ Build Master Repair Plan
+                        {fixLoading ? '⟳ BUILDING PLAN...' : '✦ BUILD MASTER REPAIR PLAN'}
                       </button>
                     </div>
                   )}
@@ -782,7 +868,7 @@ export default function SorenApp() {
             clearFixPackage();
             setBrainMode('results');
           }}
-          speak={speakLog}
+          speak={speakForCards}
         />
       )}
     </>
