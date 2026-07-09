@@ -19,11 +19,23 @@ export type LKState =
   | 'speaking'
   | 'error';
 
-export function useLiveKitSoren(onStateChange?: (s: LKState) => void) {
+function cleanupAudioElements() {
+  document.querySelectorAll('[data-soren-audio]').forEach((el) => el.remove());
+}
+
+export function useLiveKitSoren(
+  onStateChange?: (s: LKState) => void,
+  onData?: (msg: { type: string; data: unknown }) => void,
+) {
   const [state, setState] = useState<LKState>('disconnected');
   const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState('');
   const roomRef = useRef<Room | null>(null);
+  const onDataRef = useRef(onData);
+
+  useEffect(() => {
+    onDataRef.current = onData;
+  }, [onData]);
 
   const set = useCallback((s: LKState) => {
     setState(s);
@@ -33,14 +45,21 @@ export function useLiveKitSoren(onStateChange?: (s: LKState) => void) {
   const disconnect = useCallback(() => {
     roomRef.current?.disconnect();
     roomRef.current = null;
+    cleanupAudioElements();
     set('disconnected');
     setError('');
   }, [set]);
 
   const connect = useCallback(async () => {
-    if (roomRef.current) disconnect();
     set('connecting');
     setError('');
+
+    if (roomRef.current) {
+      roomRef.current.disconnect();
+      roomRef.current = null;
+      cleanupAudioElements();
+    }
+
     try {
       const res = await fetch(`${ENGINE}/token`, {
         method: 'POST',
@@ -64,9 +83,19 @@ export function useLiveKitSoren(onStateChange?: (s: LKState) => void) {
       room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
         if (track.kind !== Track.Kind.Audio) return;
         set('speaking');
-        const audio = new Audio();
-        audio.srcObject = new MediaStream([track.mediaStreamTrack]);
-        audio.play().catch(console.error);
+
+        const audioEl = track.attach();
+        audioEl.style.display = 'none';
+        audioEl.setAttribute('data-soren-audio', 'attached');
+        document.body.appendChild(audioEl);
+        audioEl.play().catch(() => {
+          audioEl.setAttribute('data-soren-audio', 'pending');
+        });
+
+        track.on('ended', () => {
+          audioEl.remove();
+          if (roomRef.current) set('listening');
+        });
       });
 
       room.on(RoomEvent.TrackUnsubscribed, () => {
@@ -78,16 +107,37 @@ export function useLiveKitSoren(onStateChange?: (s: LKState) => void) {
         if (s === ConnectionState.Disconnected) set('disconnected');
       });
 
+      room.on(RoomEvent.DataReceived, (payload: Uint8Array) => {
+        try {
+          const msg = JSON.parse(new TextDecoder().decode(payload)) as {
+            type: string;
+            data: unknown;
+          };
+          onDataRef.current?.(msg);
+        } catch {
+          // ignore non-JSON payloads
+        }
+      });
+
       await room.connect(liveKitUrl, token);
+
       await room.localParticipant.setMicrophoneEnabled(true);
+
+      try {
+        await room.startAudio();
+      } catch (e) {
+        console.warn('[LK] startAudio:', e);
+      }
+
       set('listening');
     } catch (e: unknown) {
       console.error('[LK]', e);
       setError(e instanceof Error ? e.message : 'Connection failed');
       set('error');
       roomRef.current = null;
+      cleanupAudioElements();
     }
-  }, [disconnect, set]);
+  }, [set]);
 
   const toggleMute = useCallback(async () => {
     const room = roomRef.current;
