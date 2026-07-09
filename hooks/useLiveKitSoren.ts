@@ -79,15 +79,25 @@ export function useLiveKitSoren(
   }, [clearWakeInterval, set]);
 
   const connect = useCallback(async () => {
+    // Unlock audio context synchronously
+    // Must happen in the same call stack as
+    // the user click — before any await
+    try {
+      const AudioContext = window.AudioContext
+        || (window as Window & { webkitAudioContext?: typeof window.AudioContext }).webkitAudioContext;
+      if (AudioContext) {
+        const ctx = new AudioContext();
+        await ctx.resume();
+        ctx.close();
+      }
+    } catch {
+      // ignore — best-effort unlock
+    }
+
+    if (roomRef.current) disconnect();
     set('connecting');
     setError('');
     clearWakeInterval();
-
-    if (roomRef.current) {
-      roomRef.current.disconnect();
-      roomRef.current = null;
-      cleanupAudioElements();
-    }
 
     try {
       const res = await fetch(`${ENGINE}/token`, {
@@ -170,12 +180,14 @@ export function useLiveKitSoren(
       });
 
       await room.connect(liveKitUrl, token);
-      await room.localParticipant.setMicrophoneEnabled(true);
 
-      // Unlock audio — must be called from
-      // user gesture context (connect() is
-      // triggered by button click so this is safe)
-      room.startAudio().catch(console.warn);
+      // Unlock LiveKit audio — BEFORE mic
+      try { await room.startAudio(); } catch {
+        // ignore — best-effort unlock
+      }
+
+      // Then enable mic
+      await room.localParticipant.setMicrophoneEnabled(true);
 
       startWakeKeepalive(room);
       set('listening');
@@ -187,7 +199,7 @@ export function useLiveKitSoren(
       cleanupAudioElements();
       clearWakeInterval();
     }
-  }, [clearWakeInterval, set, startWakeKeepalive]);
+  }, [clearWakeInterval, disconnect, set, startWakeKeepalive]);
 
   const toggleMute = useCallback(async () => {
     const room = roomRef.current;
