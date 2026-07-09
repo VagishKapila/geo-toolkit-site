@@ -133,9 +133,6 @@ export function useLiveKitSoren(
           'opacity:0;pointer-events:none;';
         document.body.appendChild(audioEl);
 
-        // Unlock audio context
-        room.startAudio().catch(console.warn);
-
         audioEl.play().catch(() => {
           // If still blocked, wait for next user tap
           const unlock = () => {
@@ -180,13 +177,6 @@ export function useLiveKitSoren(
       });
 
       await room.connect(liveKitUrl, token);
-
-      // Unlock LiveKit audio — BEFORE mic
-      try { await room.startAudio(); } catch {
-        // ignore — best-effort unlock
-      }
-
-      // Then enable mic
       await room.localParticipant.setMicrophoneEnabled(true);
 
       startWakeKeepalive(room);
