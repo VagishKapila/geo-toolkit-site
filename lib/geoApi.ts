@@ -36,14 +36,31 @@ export function normalizeUrl(raw: string): string {
 }
 
 export async function runAudit(url: string): Promise<GeoAudit> {
+  const normalized = normalizeUrl(url);
   const res = await fetch(`${BASE}/api/geo-audit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: normalizeUrl(url) }),
+    body: JSON.stringify({ url: normalized }),
   });
-  if (!res.ok) throw new Error(`Audit failed: ${res.status}`);
+  if (!res.ok) {
+    let msg = `Scan failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (
+        body?.error === 'Cannot reach URL'
+        || /cannot reach/i.test(body?.error ?? '')
+      ) {
+        msg = `I couldn't reach ${normalized} — the site isn't responding. Check the address and try again.`;
+      } else if (body?.error) {
+        msg = body.error;
+      }
+    } catch {
+      /* keep default */
+    }
+    throw new Error(msg);
+  }
   const data = (await res.json()) as GeoAudit;
-  return { ...data, url: normalizeUrl(url) };
+  return { ...data, url: normalized };
 }
 
 export async function requestFix(audit: GeoAudit): Promise<FixPackage> {

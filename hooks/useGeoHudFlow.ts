@@ -49,10 +49,12 @@ export function useGeoHudFlow(
         `Scan complete. Score ${result.score}. Findings are now clickable.`,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Scan failed');
+      const msg = e instanceof Error ? e.message : 'Scan failed';
+      setUrl(target.trim());
+      setError(msg);
       setPhase('input');
       setRailStep('input');
-      append('Scan failed. Try another URL.');
+      append(msg);
     }
   }, [append]);
 
