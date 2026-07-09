@@ -6,11 +6,14 @@ import {
   RoomEvent,
   Track,
   ConnectionState,
+  createLocalAudioTrack,
   type RemoteTrack,
+  type RemoteParticipant,
 } from 'livekit-client';
 
 const ENGINE =
   'https://varshyl-voice-engine-production.up.railway.app';
+const WAKE_TOPIC = 'wake-trigger';
 
 export type LKState =
   | 'disconnected'
@@ -23,6 +26,20 @@ function cleanupAudioElements() {
   document.querySelectorAll('[data-soren-audio]').forEach((el) => el.remove());
 }
 
+async function publishWakeTrigger(room: Room) {
+  await room.localParticipant.publishData(
+    new TextEncoder().encode(JSON.stringify({ source: 'geo-toolkit-site' })),
+    { reliable: true, topic: WAKE_TOPIC },
+  );
+}
+
+function isAgentParticipant(participant: { isAgent?: boolean; identity?: string }) {
+  return Boolean(
+    participant.isAgent
+    || participant.identity?.startsWith('agent'),
+  );
+}
+
 export function useLiveKitSoren(
   onStateChange?: (s: LKState) => void,
   onData?: (msg: { type: string; data: unknown }) => void,
@@ -32,10 +49,26 @@ export function useLiveKitSoren(
   const [error, setError] = useState('');
   const roomRef = useRef<Room | null>(null);
   const onDataRef = useRef(onData);
+  const wakeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     onDataRef.current = onData;
   }, [onData]);
+
+  const clearWakeInterval = useCallback(() => {
+    if (wakeIntervalRef.current) {
+      clearInterval(wakeIntervalRef.current);
+      wakeIntervalRef.current = null;
+    }
+  }, []);
+
+  const startWakeKeepalive = useCallback((room: Room) => {
+    clearWakeInterval();
+    void publishWakeTrigger(room).catch(() => {});
+    wakeIntervalRef.current = setInterval(() => {
+      void publishWakeTrigger(room).catch(() => {});
+    }, 2500);
+  }, [clearWakeInterval]);
 
   const set = useCallback((s: LKState) => {
     setState(s);
@@ -43,16 +76,18 @@ export function useLiveKitSoren(
   }, [onStateChange]);
 
   const disconnect = useCallback(() => {
+    clearWakeInterval();
     roomRef.current?.disconnect();
     roomRef.current = null;
     cleanupAudioElements();
     set('disconnected');
     setError('');
-  }, [set]);
+  }, [clearWakeInterval, set]);
 
   const connect = useCallback(async () => {
     set('connecting');
     setError('');
+    clearWakeInterval();
 
     if (roomRef.current) {
       roomRef.current.disconnect();
@@ -80,25 +115,40 @@ export function useLiveKitSoren(
       });
       roomRef.current = room;
 
-      room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
+      room.on(RoomEvent.TrackSubscribed, (
+        track: RemoteTrack,
+        _pub,
+        participant: RemoteParticipant,
+      ) => {
+        if (!isAgentParticipant(participant)) return;
         if (track.kind !== Track.Kind.Audio) return;
+
         set('speaking');
 
-        const audioEl = track.attach();
-        audioEl.style.display = 'none';
+        const audioEl = track.attach() as HTMLAudioElement;
+        audioEl.autoplay = true;
+        audioEl.volume = 1;
+        audioEl.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;';
         audioEl.setAttribute('data-soren-audio', 'attached');
         document.body.appendChild(audioEl);
-        audioEl.play().catch(() => {
-          audioEl.setAttribute('data-soren-audio', 'pending');
-        });
+        void audioEl.play().catch(() => {});
 
         track.on('ended', () => {
           audioEl.remove();
-          if (roomRef.current) set('listening');
+          if (roomRef.current) {
+            set('listening');
+            void publishWakeTrigger(roomRef.current).catch(() => {});
+          }
         });
       });
 
-      room.on(RoomEvent.TrackUnsubscribed, () => {
+      room.on(RoomEvent.TrackUnsubscribed, (
+        track: RemoteTrack,
+        _pub,
+        participant: RemoteParticipant,
+      ) => {
+        if (!isAgentParticipant(participant)) return;
+        if (track.kind === Track.Kind.Audio) track.detach();
         if (roomRef.current) set('listening');
       });
 
@@ -119,9 +169,19 @@ export function useLiveKitSoren(
         }
       });
 
-      await room.connect(liveKitUrl, token);
+      await room.connect(liveKitUrl, token, { autoSubscribe: true });
 
-      await room.localParticipant.setMicrophoneEnabled(true);
+      try {
+        const micTrack = await createLocalAudioTrack({
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        });
+        await room.localParticipant.publishTrack(micTrack);
+      } catch (micErr) {
+        console.warn('[LK] createLocalAudioTrack failed, falling back:', micErr);
+        await room.localParticipant.setMicrophoneEnabled(true);
+      }
 
       try {
         await room.startAudio();
@@ -129,6 +189,7 @@ export function useLiveKitSoren(
         console.warn('[LK] startAudio:', e);
       }
 
+      startWakeKeepalive(room);
       set('listening');
     } catch (e: unknown) {
       console.error('[LK]', e);
@@ -136,8 +197,9 @@ export function useLiveKitSoren(
       set('error');
       roomRef.current = null;
       cleanupAudioElements();
+      clearWakeInterval();
     }
-  }, [set]);
+  }, [clearWakeInterval, set, startWakeKeepalive]);
 
   const toggleMute = useCallback(async () => {
     const room = roomRef.current;

@@ -94,7 +94,8 @@ export default function SorenApp() {
         setBrainMode((prev) =>
           ['results', 'repair', 'scanning'].includes(prev) ? prev : 'idle',
         );
-        setToast('Listening. Say a website name.');
+        setToast('Soren is ready. Say a website name — e.g. "check varshyl dot com".');
+        appendLog('soren: Connected. Say a website name.');
       }
       if (s === 'speaking') {
         setBrainMode('speaking');
@@ -552,15 +553,9 @@ export default function SorenApp() {
                       type="button"
                       className="soren-btn soren-btn-primary"
                       onClick={() => void lk.connect()}
+                      disabled={lk.state === 'connecting'}
                     >
-                      Start voice flow
-                    </button>
-                    <button
-                      type="button"
-                      className="soren-btn soren-btn-ghost"
-                      onClick={() => void lk.connect()}
-                    >
-                      Hear Soren intro
+                      {lk.state === 'connecting' ? 'Connecting…' : 'Talk to Soren'}
                     </button>
                   </div>
                 </section>
