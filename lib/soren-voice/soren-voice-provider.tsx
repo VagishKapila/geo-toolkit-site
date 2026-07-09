@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -15,19 +16,23 @@ import {
   useVoiceAssistant,
 } from '@livekit/components-react';
 import type { UseSessionReturn } from '@livekit/components-react';
-import { TokenSource, Room } from 'livekit-client';
+import { ConnectionState, type Room } from 'livekit-client';
 import { AgentSessionProvider } from './agent-session-provider';
 import { StartAudioButton } from './start-audio-button';
 import { NameModal } from './name-modal';
 import { fireActivationAudio } from './activation-audio';
-import { mintVoiceToken } from './mint-voice-token';
-import {
-  PERSONA,
-  PRODUCT_ID,
-  TOKEN_URL,
-  USER_NAME_KEY,
-} from './constants';
 import { mapAgentState, STATE_BADGE } from './agent-state';
+import {
+  armTokenFetch,
+  getSharedRoom,
+  getSharedTokenSource,
+  isRoomSessionLive,
+  releaseConnect,
+  resetForNewSession,
+  teardownSession,
+  tryAcquireConnect,
+} from './session-lifecycle';
+import { USER_NAME_KEY } from './constants';
 
 export interface SorenVoiceContextValue {
   room: Room;
@@ -84,59 +89,53 @@ function SorenVoiceBridge({
   );
 }
 
-/** HUD app.tsx voice brainstem — verbatim session/room/token wiring. */
+/** HUD voice brainstem — one room, one token per user-initiated session. */
 export function SorenVoiceProvider({ children }: { children: ReactNode }) {
   const [showNameModal, setShowNameModal] = useState(false);
   const pendingConnectRef = useRef(false);
+  const connectAttemptRef = useRef(false);
 
-  const tokenSource = useMemo(
-    () =>
-      TokenSource.custom(async () => {
-        const userVoiceToken = await mintVoiceToken();
-        const storedName = localStorage.getItem(USER_NAME_KEY);
-
-        const body: Record<string, unknown> = {
-          persona: PERSONA,
-          productId: PRODUCT_ID,
-        };
-        if (userVoiceToken) body.userVoiceToken = userVoiceToken;
-        if (storedName) body.userName = storedName;
-
-        const res = await fetch(TOKEN_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-          throw new Error(`Token fetch failed: ${res.status} ${res.statusText}`);
-        }
-        const json = await res.json();
-        if (json.error) throw new Error(`Token error: ${json.message}`);
-        return { serverUrl: json.data.liveKitUrl, participantToken: json.data.token };
-      }),
-    [],
-  );
-
-  const room = useMemo(
-    () =>
-      new Room({
-        audioCaptureDefaults: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      }),
-    [],
-  );
-
+  const room = getSharedRoom();
+  const tokenSource = getSharedTokenSource();
   const session = useSession(tokenSource, { room });
 
-  const connect = useCallback(() => {
-    console.log('[HUD] session.start()');
-    session.start();
-  }, [session]);
+  useEffect(() => {
+    const onUnload = () => {
+      void teardownSession(room);
+    };
+    window.addEventListener('pagehide', onUnload);
+    window.addEventListener('beforeunload', onUnload);
+    return () => {
+      window.removeEventListener('pagehide', onUnload);
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  }, [room]);
+
+  const connect = useCallback(async () => {
+    if (connectAttemptRef.current || isRoomSessionLive(room) || !tryAcquireConnect()) {
+      console.log('[HUD] connect skipped — session already active or in flight');
+      return;
+    }
+    connectAttemptRef.current = true;
+    try {
+      if (room.state !== ConnectionState.Disconnected) {
+        await room.disconnect();
+      }
+      resetForNewSession();
+      armTokenFetch();
+      console.log('[HUD] session.start()');
+      await session.start();
+    } finally {
+      connectAttemptRef.current = false;
+      releaseConnect();
+    }
+  }, [room, session]);
 
   const activate = useCallback(() => {
+    if (isRoomSessionLive(room) || connectAttemptRef.current) {
+      console.log('[HUD] activate skipped — session already active');
+      return;
+    }
     fireActivationAudio();
     const storedName = localStorage.getItem(USER_NAME_KEY);
     if (!storedName) {
@@ -144,19 +143,25 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
       setShowNameModal(true);
       return;
     }
-    connect();
-  }, [connect]);
+    void connect();
+  }, [connect, room]);
 
   const handleNameSubmit = useCallback(
     (name: string) => {
+      if (isRoomSessionLive(room) || connectAttemptRef.current) {
+        console.log('[HUD] name submit skipped — session already active');
+        setShowNameModal(false);
+        pendingConnectRef.current = false;
+        return;
+      }
       localStorage.setItem(USER_NAME_KEY, name);
       setShowNameModal(false);
       if (pendingConnectRef.current) {
         pendingConnectRef.current = false;
-        connect();
+        void connect();
       }
     },
-    [connect],
+    [connect, room],
   );
 
   return (
