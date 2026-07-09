@@ -12,31 +12,28 @@ export function isSorenEcho(text: string): boolean {
   return ECHO_PHRASES.some((phrase) => t.includes(phrase));
 }
 
-export function extractWebsiteFromSpeech(text: string): string | null {
-  let normalized = text.trim().toLowerCase();
+export function extractWebsiteFromSpeech(transcript: string): string | null {
+  const text = transcript.toLowerCase().trim();
 
-  normalized = normalized.replace(
-    /^(please\s+)?(open|check|scan|audit|go to|visit|look at)\s+(the\s+)?(website\s+)?/i,
-    '',
+  const dotted = text
+    .replace(/\s+dot\s+/gi, '.')
+    .replace(/\s+period\s+/gi, '.')
+    .replace(/\s+punto\s+/gi, '.');
+
+  const cleaned = dotted
+    .replace(/^(can you |please |)?(check|open|scan|audit|search|look at|analyze|test|go to|visit|try)\s+/i, '')
+    .replace(/^(the\s+)?(website|site|url|page|domain)\s+(is\s+)?/i, '')
+    .replace(/^for\s+/i, '')
+    .trim();
+
+  const domainMatch = cleaned.match(
+    /(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?(?:\/\S*)?)/i,
   );
-  normalized = normalized.replace(/\s+dot\s+/g, '.');
-  normalized = normalized.replace(/\s+point\s+/g, '.');
-  normalized = normalized.replace(/\s+/g, '');
 
-  const dotted = normalized.match(
-    /(?:https?:\/\/)?(?:www\.)?([a-z0-9][-a-z0-9]*(?:\.[a-z0-9][-a-z0-9]*)+)/i,
-  );
-  if (dotted) {
-    const host = dotted[1] ?? dotted[0];
-    return host.replace(/^www\./, '');
-  }
+  if (!domainMatch) return null;
 
-  const spaced = text.trim().toLowerCase().match(
-    /\b([a-z0-9][-a-z0-9]*)\s+(com|org|net|io|co|edu|gov|dev|app)\b/i,
-  );
-  if (spaced) {
-    return `${spaced[1]}.${spaced[2]}`;
-  }
+  const raw = domainMatch[0];
 
-  return null;
+  if (raw.startsWith('http')) return raw;
+  return `https://${raw}`;
 }
