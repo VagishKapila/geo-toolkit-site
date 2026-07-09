@@ -40,7 +40,7 @@ async function unlockAudioContext() {
 export default function GeoHud({ session, room }: Props) {
   const { email } = useCredits();
   const flow = useGeoHudFlow(session, room);
-  useWakeTrigger(room, flow.connected);
+  useWakeTrigger(room);
 
   const handleTalk = () => {
     void unlockAudioContext().then(() => session.start());
