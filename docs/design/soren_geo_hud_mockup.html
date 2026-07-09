@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Soren GEO — Real Clickable Web Flow</title>
+<style>
+:root{
+  --bg:#05080a;--panel:rgba(7,18,22,.86);--panel2:rgba(9,25,29,.94);
+  --line:rgba(50,255,188,.28);--line2:rgba(50,255,188,.56);
+  --green:#32ffbc;--cyan:#4deaff;--red:#ff5d6c;--amber:#ffb14a;
+  --text:#eafff6;--muted:#8eaaa1;--dim:#496960;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:#05080a;color:var(--text);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+  overflow:hidden;
+}
+button,input{font:inherit}
+button{cursor:pointer}
+.app{
+  height:100vh;
+  display:grid;
+  grid-template-rows:68px 1fr 82px;
+  background:
+    radial-gradient(circle at 20% 20%,rgba(50,255,188,.08),transparent 34%),
+    radial-gradient(circle at 75% 35%,rgba(77,234,255,.06),transparent 30%),
+    #05080a;
+}
+.top{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;border-bottom:1px solid var(--line);
+  background:rgba(0,0,0,.55)
+}
+.brand{display:flex;align-items:center;gap:14px}
+.logoMark{width:34px;height:34px;border-radius:50%;border:2px solid var(--green);box-shadow:0 0 24px rgba(50,255,188,.35);position:relative}
+.logoMark:after{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--green);opacity:.45}
+.brand h1{margin:0;color:var(--green);letter-spacing:.34em;font-size:20px}
+.brand p{margin:4px 0 0;color:var(--muted);font-size:11px;letter-spacing:.14em}
+.topRight{display:flex;gap:12px;align-items:center}
+.status{border:1px solid var(--line2);border-radius:999px;padding:8px 13px;color:var(--green);font-size:12px;background:rgba(50,255,188,.05)}
+.main{
+  min-height:0;
+  display:grid;
+  grid-template-columns:320px minmax(0,1fr) 340px;
+  gap:16px;padding:16px;
+}
+.panel{
+  border:1px solid var(--line);border-radius:16px;background:var(--panel);
+  box-shadow:0 0 50px rgba(50,255,188,.06), inset 0 0 40px rgba(50,255,188,.02);
+  overflow:hidden;
+}
+.left{
+  display:grid;grid-template-rows:auto 1fr auto;
+}
+.leftHead{padding:18px;border-bottom:1px solid var(--line)}
+.leftHead h2{margin:0 0 8px;color:var(--green);letter-spacing:.16em}
+.leftHead p{margin:0;color:var(--muted);line-height:1.45;font-size:13px}
+.coreWrap{display:flex;align-items:center;justify-content:center;text-align:center;padding:22px}
+.core{
+  width:210px;height:210px;border-radius:50%;display:grid;place-items:center;position:relative;
+  background:radial-gradient(circle,rgba(50,255,188,.25),rgba(77,234,255,.08) 42%,rgba(0,0,0,.05) 70%);
+  box-shadow:0 0 70px rgba(50,255,188,.20);
+}
+.core:before,.core:after{content:"";position:absolute;border:1px dashed rgba(50,255,188,.35);border-radius:50%;animation:spin 18s linear infinite}
+.core:before{inset:-18px}.core:after{inset:-36px;animation-direction:reverse;animation-duration:28s}
+@keyframes spin{to{transform:rotate(360deg)}}
+.brain{position:relative;width:150px;height:105px;filter:drop-shadow(0 0 18px rgba(50,255,188,.85))}
+.brain svg{position:absolute;inset:0;width:100%;height:100%}
+.node{position:absolute;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 18px var(--green);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.9);filter:hue-rotate(70deg)}}.n1{left:16px;top:42px}.n2{left:42px;top:20px}.n3{left:72px;top:34px}.n4{left:106px;top:18px}.n5{left:122px;top:56px}.n6{left:82px;top:74px}.n7{left:38px;top:72px}.n8{left:18px;top:80px}
+.sorenLabel{text-align:center;margin-top:42px;color:var(--green);font-size:28px;letter-spacing:.35em;font-weight:900}
+.sorenMode{color:var(--muted);letter-spacing:.16em;font-size:12px;margin-top:10px}
+.leftActions{padding:16px;border-top:1px solid var(--line);display:grid;gap:10px}
+.btn{
+  border:1px solid var(--line2);background:rgba(50,255,188,.08);color:var(--green);
+  border-radius:10px;padding:12px 14px;font-weight:900;
+}
+.btn:hover{background:rgba(50,255,188,.16)}
+.btn.secondary{color:var(--text);border-color:var(--line);background:rgba(255,255,255,.035)}
+.btn.amber{color:var(--amber);border-color:rgba(255,177,74,.55);background:rgba(255,177,74,.09)}
+.btn.red{color:var(--red);border-color:rgba(255,93,108,.55);background:rgba(255,93,108,.08)}
+.center{
+  display:grid;grid-template-rows:44px 1fr;gap:14px;min-height:0;
+}
+.rail{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.step{border:1px solid var(--line);border-radius:999px;display:grid;place-items:center;color:var(--dim);font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+.step.active{color:var(--green);border-color:var(--line2);background:rgba(50,255,188,.08);box-shadow:0 0 22px rgba(50,255,188,.10)}
+.workspace{min-height:0;position:relative}
+.screen{
+  display:none;height:100%;overflow:auto;padding:22px;
+}
+.screen.active{display:block}
+.hero h2{font-size:40px;line-height:1.1;margin:0 0 12px;color:var(--green)}
+.hero p{font-size:17px;line-height:1.55;color:var(--muted);max-width:760px}
+.urlBox{
+  margin-top:28px;border:1px solid var(--line2);border-radius:18px;background:rgba(50,255,188,.05);
+  padding:20px;display:grid;grid-template-columns:1fr 160px;gap:14px;align-items:end
+}
+.urlBox label{display:block;color:var(--green);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:9px}
+.urlBox input{
+  width:100%;font-size:28px;color:var(--text);background:#061114;border:1px solid var(--line);
+  border-radius:12px;padding:16px;outline:none;
+}
+.startCards{margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.infoCard{border:1px solid var(--line);border-radius:14px;padding:16px;background:rgba(255,255,255,.025)}
+.infoCard b{color:var(--green)}.infoCard p{color:var(--muted);line-height:1.45}
+.confirmBig{
+  max-width:850px;margin:40px auto;border:1px solid rgba(255,177,74,.6);border-radius:22px;
+  background:linear-gradient(135deg,rgba(255,177,74,.12),rgba(50,255,188,.05));
+  padding:26px;text-align:left;box-shadow:0 0 60px rgba(255,177,74,.08)
+}
+.confirmBig label{display:block;color:var(--amber);letter-spacing:.16em;font-size:13px;text-transform:uppercase;margin-bottom:12px}
+.heard{
+  width:100%;text-align:left;background:rgba(0,0,0,.30);border:1px solid var(--line2);border-radius:16px;
+  padding:22px;color:var(--green);font-size:34px;font-weight:900;
+}
+.heard small{display:block;color:var(--muted);font-size:13px;font-weight:400;margin-top:8px}
+.confirmRow{display:grid;grid-template-columns:90px 1fr 1fr;gap:14px;align-items:center;margin-top:18px}
+.timer{
+  width:82px;height:82px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--amber);
+  color:var(--amber);font-size:34px;font-weight:900;box-shadow:0 0 28px rgba(255,177,74,.18)
+}
+.editPanel{display:none;margin-top:18px;border-top:1px solid rgba(255,177,74,.32);padding-top:18px;grid-template-columns:1fr auto auto;gap:12px}
+.editPanel.show{display:grid}
+.editPanel input{font-size:22px;color:var(--text);background:#061114;border:1px solid var(--line);border-radius:12px;padding:14px}
+.scanGrid{display:grid;grid-template-columns:1fr 320px;gap:22px;align-items:center;height:100%}
+.scanGrid h2{font-size:38px;color:var(--green);margin:0 0 14px}
+.scanGrid p{color:var(--muted);line-height:1.55;font-size:16px}
+.scanChecks{display:grid;gap:12px}
+.scanCheck{border:1px solid var(--line);border-radius:12px;padding:15px;background:rgba(50,255,188,.04);color:#d9fff2}
+.scanCheck:before{content:"●";color:var(--green);margin-right:10px}
+.scoreHead{display:grid;grid-template-columns:150px 1fr 280px;gap:20px;align-items:center;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:linear-gradient(90deg,rgba(255,93,108,.08),rgba(50,255,188,.05))}
+.ring{width:130px;height:130px;margin:18px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--red) 0 32%,var(--amber) 32% 68%,rgba(255,255,255,.08) 68%);position:relative;cursor:pointer}
+.ring:after{content:"";position:absolute;inset:12px;border-radius:50%;background:#061014}
+.ring span{position:relative;z-index:1;font-size:48px;font-weight:900}
+.scoreText h2{margin:0 0 8px;color:var(--green);font-size:28px}
+.scoreText p{color:var(--muted);line-height:1.45}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-right:18px}
+.summary button{background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:12px;color:var(--text);padding:14px;cursor:pointer}
+.summary b{display:block;font-size:28px}.summary span{font-size:11px;color:var(--muted)}
+.findingGrid{margin-top:14px;display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.finding{
+  border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025);
+  padding:16px;color:var(--text);text-align:left;min-height:100px;cursor:pointer;
+}
+.finding:hover{background:rgba(50,255,188,.07)}
+.finding.hidden{display:none}
+.finding strong{display:block;font-size:16px;margin-bottom:6px}
+.finding small{color:var(--muted);line-height:1.35}
+.badge{float:right;font-weight:900}
+.detailDrop{
+  display:none;margin-top:14px;border:1px solid var(--line2);border-radius:16px;background:rgba(0,0,0,.28);padding:18px;
+}
+.detailDrop.show{display:block}
+.detailDrop h3{margin:0 0 10px;color:var(--amber);font-size:22px}
+.detailDrop p{line-height:1.5;color:#d8fff0}
+.quote{border:1px solid var(--line);border-radius:12px;background:rgba(50,255,188,.04);padding:13px;color:#9bdcc7;margin:12px 0}
+.masterHero{border:1px solid var(--line2);border-radius:18px;background:linear-gradient(135deg,rgba(50,255,188,.12),rgba(77,234,255,.05));padding:24px}
+.masterHero h2{font-size:38px;margin:0 0 10px;color:var(--green)}
+.masterHero p{color:var(--muted);font-size:16px;line-height:1.55;max-width:850px}
+.beforeAfter{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;max-width:620px;margin-top:20px}
+.ba{border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center;background:rgba(255,255,255,.035)}
+.ba span{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.12em}
+.ba b{font-size:52px}
+.arrow{font-size:42px;color:var(--green);font-weight:900;display:grid;place-items:center}
+.execGrid{margin-top:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.execCard{border:1px solid var(--line);border-radius:16px;padding:18px;background:rgba(255,255,255,.025)}
+.execCard h3{margin:0 0 10px;font-size:22px}
+.price{font-size:30px;color:var(--green);font-weight:900;margin-bottom:10px}
+.execCard p{color:var(--muted);line-height:1.45;min-height:88px}
+.right{display:grid;grid-template-rows:auto auto 1fr;gap:16px}
+.sideBlock{padding:16px}
+.sideTitle{height:42px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px;letter-spacing:.22em;text-transform:uppercase}
+.row{display:flex;justify-content:space-between;color:var(--muted);padding:9px 0}
+.row b{color:var(--text)}
+.log{height:100%;overflow:auto;padding:14px;color:var(--muted);font-size:12px;line-height:1.45}
+.log p{margin:0 0 9px}.log b{color:var(--green)}
+.bottom{
+  border-top:1px solid var(--line);background:rgba(0,0,0,.55);
+  display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:0 24px
+}
+.micZone{display:flex;align-items:center;gap:14px}
+.mic{
+  width:54px;height:54px;border-radius:50%;border:2px solid var(--green);background:transparent;color:var(--green);
+  box-shadow:0 0 24px rgba(50,255,188,.25);font-size:24px
+}
+.micText b{display:block}.micText span{font-size:12px;color:var(--muted);letter-spacing:.10em}
+@media(max-width:1100px){
+  body{overflow:auto}.app{height:auto;min-height:100vh}.main{grid-template-columns:1fr}.right{grid-template-rows:auto}.findingGrid,.execGrid,.startCards,.scanGrid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><div class="logoMark"></div><div><h1>SOREN GEO</h1><p>AI DISCOVERABILITY TOOLKIT · WORKING CLICK FLOW</p></div></div>
+    <div class="topRight"><div class="status" id="sessionStatus">READY</div><button class="btn secondary" onclick="resetAll()">HOME</button></div>
+  </header>
+  <main class="main">
+    <section class="panel left">
+      <div class="leftHead"><h2>SOREN</h2><p>Jarvis-style HUD for GEO audit, voice confirmation, findings, and one Master Repair Plan.</p></div>
+      <div class="coreWrap"><div><div class="core"><div class="brain"><svg viewBox="0 0 150 106"><path d="M16 42 L42 20 L72 34 L106 18 L122 56 L82 74 L38 72 L18 80 L16 42 M42 20 L38 72 M72 34 L82 74 M106 18 L82 74 M122 56 L72 34" stroke="rgba(50,255,188,.58)" fill="none"/></svg><i class="node n1"></i><i class="node n2"></i><i class="node n3"></i><i class="node n4"></i><i class="node n5"></i><i class="node n6"></i><i class="node n7"></i><i class="node n8"></i></div></div><div class="sorenLabel">SOREN</div><div class="sorenMode" id="modeText">● AWAITING WEBSITE</div></div></div>
+      <div class="leftActions">
+        <button class="btn" onclick="startFromTyped()">START WITH TYPED WEBSITE</button>
+        <button class="btn secondary" onclick="simulateVoice()">SIMULATE VOICE WEBSITE</button>
+        <button class="btn amber" onclick="showScreen('master');setStep('execute');log('Jumped to Master Repair Plan.')">VIEW MASTER PLAN</button>
+      </div>
+    </section>
+    <section class="center">
+      <div class="rail"><div class="step active" data-step="input">Input</div><div class="step" data-step="confirm">Confirm</div><div class="step" data-step="scan">Scan</div><div class="step" data-step="result">Result</div><div class="step" data-step="investigate">Investigate</div><div class="step" data-step="execute">Execute</div></div>
+      <section class="panel workspace">
+        <div class="screen active hero" id="screen-input">
+          <h2>Type or speak the website.</h2>
+          <p>This is the step that was missing. The input is large, obvious, and clickable. After this, Soren shows an 8-second confirmation card so the user can correct accent/spelling issues before the scan runs.</p>
+          <div class="urlBox">
+            <div><label>Website URL</label><input id="websiteInput" value="vagishkapila.com" onkeydown="if(event.key==='Enter')startFromTyped()"/></div>
+            <button class="btn" onclick="startFromTyped()">START</button>
+          </div>
+          <div class="startCards"><div class="infoCard"><b>Analysis first</b><p>Findings open as dropdown investigation cards. No single-fix pricing appears there.</p></div><div class="infoCard"><b>Execution second</b><p>One Master Repair Plan packages every recommended fix together.</p></div></div>
+        </div>
+        <div class="screen" id="screen-confirm">
+          <div class="confirmBig">
+            <label>Soren heard this website</label>
+            <button class="heard" id="heardButton" onclick="pauseEdit()">vagishkapila.com<small>Click this card to pause the countdown and edit spelling.</small></button>
+            <div class="confirmRow"><div class="timer" id="timer">8</div><button class="btn secondary" onclick="pauseEdit()">EDIT SPELLING</button><button class="btn amber" onclick="confirmNow()">CONFIRM NOW</button></div>
+            <div class="editPanel" id="editPanel"><input id="editInput" value="vagishkapila.com"/><button class="btn" onclick="saveEdit()">SAVE & SCAN</button><button class="btn secondary" onclick="resumeTimer()">RESUME 8 SEC</button></div>
+          </div>
+        </div>
+        <div class="screen" id="screen-scan">
+          <div class="scanGrid">
+            <div><h2>Scanning full website...</h2><p>Soren is scanning the full readiness layer, not one issue. The next screen separates analysis from execution.</p></div>
+            <div class="scanChecks"><div class="scanCheck">AI discoverability / GEO signals</div><div class="scanCheck">ADA accessibility basics</div><div class="scanCheck">Security headers</div><div class="scanCheck">Monitoring readiness</div></div>
+          </div>
+        </div>
+        <div class="screen" id="screen-result">
+          <div class="scoreHead">
+            <div class="ring" onclick="openDetail('overview')"><span>68</span></div>
+            <div class="scoreText"><h2>AI Readiness Score</h2><p id="scoreLine">Site has 4 issues, 2 recommendations, and 2 passed checks. Click any finding to investigate.</p></div>
+            <div class="summary"><button onclick="filterFindings('issue')"><b style="color:var(--red)">4</b><span>Issues</span></button><button onclick="filterFindings('warn')"><b style="color:var(--amber)">2</b><span>Warnings</span></button><button onclick="filterFindings('pass')"><b style="color:var(--green)">2</b><span>Passed</span></button></div>
+          </div>
+          <div class="findingGrid">
+            <button class="finding" data-kind="issue" onclick="openDetail('geo')"><span class="badge" style="color:var(--red)">0/20</span><strong>AI-readable identity</strong><small>Missing llms.txt and structured data.</small></button>
+            <button class="finding" data-kind="issue" onclick="openDetail('robots')"><span class="badge" style="color:var(--red)">0/15</span><strong>AI crawler rules</strong><small>robots.txt does not clearly allow AI crawlers.</small></button>
+            <button class="finding" data-kind="issue" onclick="openDetail('ada')"><span class="badge" style="color:var(--red)">41</span><strong>ADA basics</strong><small>Alt text, heading order, and labels need review.</small></button>
+            <button class="finding" data-kind="issue" onclick="openDetail('security')"><span class="badge" style="color:var(--amber)">55</span><strong>Security headers</strong><small>Recommended browser hardening headers missing.</small></button>
+            <button class="finding" data-kind="warn" onclick="openDetail('content')"><span class="badge" style="color:var(--amber)">72</span><strong>AI content clarity</strong><small>Service descriptions could be clearer.</small></button>
+            <button class="finding" data-kind="warn" onclick="openDetail('monitor')"><span class="badge" style="color:var(--amber)">OFF</span><strong>Soren Guardian</strong><small>Monitoring is not enabled yet.</small></button>
+            <button class="finding" data-kind="pass" onclick="openDetail('passed')"><span class="badge" style="color:var(--green)">OK</span><strong>Sitemap + Open Graph</strong><small>These checks are already present.</small></button>
+          </div>
+          <div class="detailDrop" id="detailDrop"><h3 id="detailTitle"></h3><p id="detailText"></p><div class="quote" id="detailQuote"></div><button class="btn" onclick="showScreen('master');setStep('execute');log('Master Repair Plan opened from finding detail.')">BUILD MASTER REPAIR PLAN</button> <button class="btn secondary" onclick="closeDetail()">CLOSE</button></div>
+        </div>
+        <div class="screen" id="screen-master">
+          <div class="masterHero">
+            <h2>Master Repair Plan</h2>
+            <p>One plan fixes the full scan. This is not one problem at a time. It packages GEO, ADA basics, security hardening, and monitoring recommendations together.</p>
+            <div class="beforeAfter"><div class="ba"><span>Current</span><b style="color:var(--red)">68</b></div><div class="arrow">→</div><div class="ba"><span>Projected</span><b style="color:var(--green)">96</b></div></div>
+          </div>
+          <div class="execGrid">
+            <div class="execCard"><h3>Do it yourself</h3><div class="price">ZIP</div><p>One complete package with files, snippets, and instructions. No payment. We ask for a GitHub star if it helps.</p><button class="btn" onclick="log('DIY complete ZIP selected.')">DOWNLOAD PACKAGE</button></div>
+            <div class="execCard"><h3>AI Assist</h3><div class="price">$1.99</div><p>Soren writes one complete prompt and code package for Claude, ChatGPT, or Cursor.</p><button class="btn" onclick="log('AI Assist selected.')">USE AI ASSIST</button></div>
+            <div class="execCard"><h3>Done with you</h3><div class="price">$5</div><p>Soren guides the full repair plan with you and re-checks the score afterward.</p><button class="btn amber" onclick="log('Done-with-you full fix selected.')">START FULL FIX</button></div>
+          </div>
+        </div>
+      </section>
+    </section>
+    <aside class="right">
+      <section class="panel"><div class="sideTitle">System</div><div class="sideBlock"><div class="row"><span>Mode</span><b id="sysMode">Input</b></div><div class="row"><span>Timer</span><b>8 sec</b></div><div class="row"><span>Product</span><b>GEO Toolkit</b></div><div class="row"><span>Plan</span><b>Master Repair</b></div></div></section>
+      <section class="panel"><div class="sideTitle">Metrics</div><div class="sideBlock"><div class="row"><span>Current Score</span><b id="mScore">—</b></div><div class="row"><span>Projected Score</span><b id="mProj">—</b></div><div class="row"><span>Issues</span><b id="mIssues">—</b></div></div></section>
+      <section class="panel"><div class="sideTitle">Conversation Log</div><div class="log" id="log"><p><b>Soren:</b> Ready. Type a website or simulate voice.</p></div></section>
+    </aside>
+  </main>
+  <footer class="bottom">
+    <div class="micZone"><button class="mic" onclick="simulateVoice()">🎙</button><div class="micText"><b id="bottomText">Ready for website input.</b><span>Type, confirm, scan, investigate, master repair plan.</span></div></div>
+    <button class="btn secondary" onclick="showScreen('input');setStep('input')">INPUT</button>
+    <button class="btn red" onclick="resetAll()">RESET</button>
+  </footer>
+</div>
+<script>
+let currentSite='vagishkapila.com', countdown=8, timer=null;
+const details={
+ overview:['Full scan overview','This is analysis. Soren found multiple opportunities and will package them into one Master Repair Plan.','Soren: “I scanned the full site. I found everything worth fixing. Now I can package it into one complete repair plan.”'],
+ geo:['AI-readable identity','Your website does not clearly explain itself to AI engines. Add llms.txt and structured product/company facts.','Included in the Master Repair Plan.'],
+ robots:['AI crawler rules','Your robots.txt does not clearly allow AI crawlers. This weakens discoverability.','Included in the Master Repair Plan.'],
+ ada:['ADA accessibility basics','Likely missing alt text, heading order issues, and weak form labels. Common fixes can be generated, but full compliance still needs review.','Included in the Master Repair Plan.'],
+ security:['Security headers','Recommended protection headers are missing. This is hardening, not proof of a hack.','Included in the Master Repair Plan.'],
+ content:['AI content clarity','Your site can describe services and location more clearly for AI summarization.','Included in the Master Repair Plan.'],
+ monitor:['Soren Guardian','Monitoring is off. Future updates may break your score without warning.','Optional after repair plan.'],
+ passed:['Passed checks','Sitemap and basic social metadata are present. No action required here.','Soren will leave these alone.']
+};
+function $(id){return document.getElementById(id)}
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $('screen-'+name).classList.add('active');
+}
+function setStep(step){
+  document.querySelectorAll('.step').forEach(s=>s.classList.toggle('active',s.dataset.step===step));
+  $('sysMode').textContent=step;
+  $('sessionStatus').textContent=step.toUpperCase();
+  $('modeText').textContent='● '+step.toUpperCase();
+  $('bottomText').textContent=step.charAt(0).toUpperCase()+step.slice(1)+'...';
+}
+function log(msg){
+  $('log').innerHTML += '<p><b>Soren:</b> '+msg+'</p>';
+  $('log').scrollTop=$('log').scrollHeight;
+}
+function startFromTyped(){
+  currentSite=($('websiteInput').value||'vagishkapila.com').trim();
+  startConfirm();
+}
+function simulateVoice(){
+  currentSite=($('websiteInput').value||'vagishkapila.com').trim();
+  log('I heard '+currentSite+'. Showing the 8-second confirmation card.');
+  startConfirm();
+}
+function startConfirm(){
+  clearInterval(timer);
+  closeDetail();
+  showScreen('confirm');setStep('confirm');
+  $('heardButton').innerHTML=currentSite+'<small>Click this card to pause the countdown and edit spelling.</small>';
+  $('editInput').value=currentSite;
+  $('editPanel').classList.remove('show');
+  countdown=8;$('timer').textContent=countdown;
+  timer=setInterval(()=>{countdown--;$('timer').textContent=countdown;if(countdown<=0){clearInterval(timer);startScan()}},1000);
+}
+function pauseEdit(){
+  clearInterval(timer);
+  $('editPanel').classList.add('show');
+  setStep('confirm');
+  log('Timer paused. Edit the spelling and save, or resume the countdown.');
+  setTimeout(()=>$('editInput').focus(),50);
+}
+function resumeTimer(){
+  $('editPanel').classList.remove('show');
+  countdown=8;$('timer').textContent=countdown;
+  clearInterval(timer);
+  timer=setInterval(()=>{countdown--;$('timer').textContent=countdown;if(countdown<=0){clearInterval(timer);startScan()}},1000);
+  log('Countdown resumed.');
+}
+function saveEdit(){
+  currentSite=($('editInput').value||currentSite).trim();
+  $('websiteInput').value=currentSite;
+  log('Saved '+currentSite+'. Starting scan.');
+  startScan();
+}
+function confirmNow(){clearInterval(timer);startScan()}
+function startScan(){
+  clearInterval(timer);
+  showScreen('scan');setStep('scan');
+  log('Scanning GEO, ADA basics, security headers, and monitoring readiness.');
+  setTimeout(showResults,1200);
+}
+function showResults(){
+  showScreen('result');setStep('result');
+  $('scoreLine').textContent=currentSite+' has 4 issues, 2 recommendations, and 2 passed checks. Click any finding to investigate.';
+  $('mScore').textContent='68';$('mProj').textContent='96';$('mIssues').textContent='4';
+  log('Scan complete. Score 68. Findings are now clickable dropdown cards.');
+}
+function openDetail(key){
+  const d=details[key];
+  $('detailTitle').textContent=d[0];$('detailText').textContent=d[1];$('detailQuote').textContent=d[2];
+  $('detailDrop').classList.add('show');
+  setStep('investigate');
+  log('Opened finding: '+d[0]+'.');
+  $('detailDrop').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function closeDetail(){$('detailDrop').classList.remove('show')}
+function filterFindings(kind){
+  document.querySelectorAll('.finding').forEach(f=>f.classList.toggle('hidden',f.dataset.kind!==kind));
+  setStep('investigate');
+  log('Filtered findings: '+kind+'.');
+}
+function resetAll(){
+  clearInterval(timer);currentSite='vagishkapila.com';countdown=8;
+  $('websiteInput').value=currentSite;$('editInput').value=currentSite;
+  document.querySelectorAll('.finding').forEach(f=>f.classList.remove('hidden'));
+  closeDetail();showScreen('input');setStep('input');
+  $('mScore').textContent='—';$('mProj').textContent='—';$('mIssues').textContent='—';
+  log('Reset complete. Ready for website input.');
+}
+</script>
+</body>
+</html>

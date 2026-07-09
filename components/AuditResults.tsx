@@ -2,61 +2,90 @@
 
 import { useEffect, useState } from 'react';
 import { FixDeliveryCards } from '@/components/FixDeliveryCards';
+import { MasterPlan } from '@/components/geo/MasterPlan';
+import { ResultFindings } from '@/components/geo/ResultFindings';
 import { type GeoAudit } from '@/lib/geoApi';
+import type { RailStep } from '@/lib/geoMetrics';
+
+type FilterKind = 'all' | 'issue' | 'warn' | 'pass';
 
 interface Props {
   audit: GeoAudit;
   autoOpenFix: boolean;
   email: string;
-  onReset: () => void;
+  showMaster: boolean;
+  onShowMaster: (v: boolean) => void;
+  onRailStep: (step: RailStep) => void;
+  onLog: (msg: string) => void;
 }
 
 export default function AuditResults({
   audit,
   autoOpenFix,
   email,
-  onReset,
+  showMaster,
+  onShowMaster,
+  onRailStep,
+  onLog,
 }: Props) {
   const [showFix, setShowFix] = useState(false);
+  const [filter, setFilter] = useState<FilterKind>('all');
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (autoOpenFix) setShowFix(true);
-  }, [autoOpenFix]);
+    if (autoOpenFix) {
+      onShowMaster(true);
+      onRailStep('execute');
+      setShowFix(true);
+      onLog('Master Repair Plan opened from voice agent.');
+    }
+  }, [autoOpenFix, onLog, onRailStep, onShowMaster]);
 
-  const failing = audit.checks.filter((c) => !c.passed);
-  const passing = audit.checks.filter((c) => c.passed);
+  if (showMaster) {
+    return (
+      <>
+        <MasterPlan
+          audit={audit}
+          onOpenFix={() => setShowFix(true)}
+          onLog={onLog}
+        />
+        {showFix && (
+          <FixDeliveryCards
+            auditResult={audit}
+            email={email}
+            onClose={() => setShowFix(false)}
+            speak={() => {}}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
-    <section className="geo-screen">
-      <header className="geo-scorehead">
-        <div className="geo-ring" data-grade={audit.grade}>
-          <span>{audit.score}</span>
-        </div>
-        <div>
-          <h2>AI Readiness Score — {audit.grade}</h2>
-          <p>
-            {audit.url} · {audit.platform} · {failing.length} issues ·{' '}
-            {passing.length} passed
-          </p>
-        </div>
-        <button
-          type="button"
-          className="geo-btn geo-btn-primary"
-          onClick={() => setShowFix(true)}
-        >
-          BUILD MASTER REPAIR PLAN
-        </button>
-      </header>
-
-      <div className="geo-findings">
-        {audit.checks.map((c, i) => (
-          <div key={c.name ?? i} className="geo-finding" data-passed={c.passed}>
-            <strong>{c.name}</strong>
-            {c.tip && <small>{c.tip}</small>}
-          </div>
-        ))}
-      </div>
-
+    <section className="screen active">
+      <ResultFindings
+        checks={audit.checks}
+        score={audit.score}
+        url={audit.url}
+        filter={filter}
+        openKey={openKey}
+        onFilter={(kind) => {
+          setFilter(kind);
+          onRailStep('investigate');
+          onLog(`Filtered findings: ${kind}.`);
+        }}
+        onOpen={(check) => {
+          setOpenKey(check.name);
+          onRailStep('investigate');
+          onLog(`Opened finding: ${check.name}.`);
+        }}
+        onCloseDetail={() => setOpenKey(null)}
+        onMaster={() => {
+          onShowMaster(true);
+          onRailStep('execute');
+          onLog('Master Repair Plan opened from finding detail.');
+        }}
+      />
       {showFix && (
         <FixDeliveryCards
           auditResult={audit}
@@ -65,10 +94,6 @@ export default function AuditResults({
           speak={() => {}}
         />
       )}
-
-      <button type="button" className="geo-btn" onClick={onReset}>
-        SCAN ANOTHER SITE
-      </button>
     </section>
   );
 }

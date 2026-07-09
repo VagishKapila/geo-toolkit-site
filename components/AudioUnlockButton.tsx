@@ -9,7 +9,7 @@ export function AudioUnlockButton() {
     <button
       type="button"
       {...mergedProps}
-      className="geo-audio-unlock"
+      className="geo-hud-audio-unlock"
     >
       🔊 Tap to enable audio
     </button>

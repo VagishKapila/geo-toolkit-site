@@ -22,38 +22,37 @@ export function GeoConfirmScreen({
   onResume,
 }: ConfirmProps) {
   return (
-    <section className="geo-screen geo-confirm">
-      <label>Soren heard this website</label>
-      <button type="button" className="geo-heard" onClick={onEdit}>
-        {heardUrl}
-        <small>Tap to pause and edit spelling.</small>
-      </button>
-      {!editing ? (
-        <div className="geo-confirm-row">
-          <div className="geo-timer">{countdown}</div>
-          <button type="button" className="geo-btn" onClick={onEdit}>
+    <section className="screen active">
+      <div className="confirmBig">
+        <label>Soren heard this website</label>
+        <button type="button" className="heard" onClick={onEdit}>
+          {heardUrl}
+          <small>Click this card to pause the countdown and edit spelling.</small>
+        </button>
+        <div className="confirmRow">
+          <div className="timer">{countdown}</div>
+          <button type="button" className="btn secondary" onClick={onEdit}>
             EDIT SPELLING
           </button>
-          <button type="button" className="geo-btn geo-btn-primary" onClick={onConfirmNow}>
+          <button type="button" className="btn amber" onClick={onConfirmNow}>
             CONFIRM NOW
           </button>
         </div>
-      ) : (
-        <div className="geo-confirm-row geo-confirm-edit">
+        <div className={`editPanel${editing ? ' show' : ''}`}>
           <input
-            autoFocus
+            autoFocus={editing}
             value={heardUrl}
             onChange={(e) => onHeardChange(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onSaveScan()}
           />
-          <button type="button" className="geo-btn geo-btn-primary" onClick={onSaveScan}>
+          <button type="button" className="btn" onClick={onSaveScan}>
             SAVE &amp; SCAN
           </button>
-          <button type="button" className="geo-btn" onClick={onResume}>
+          <button type="button" className="btn secondary" onClick={onResume}>
             RESUME 8 SEC
           </button>
         </div>
-      )}
+      </div>
     </section>
   );
 }

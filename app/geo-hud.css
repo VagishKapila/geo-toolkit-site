@@ -1,0 +1,886 @@
+/* Scoped HUD tokens — mockup source: docs/design/soren_geo_hud_mockup.html */
+.geo-hud-app {
+  --bg: #05080a;
+  --panel: rgba(7, 18, 22, 0.86);
+  --panel2: rgba(9, 25, 29, 0.94);
+  --line: rgba(50, 255, 188, 0.28);
+  --line2: rgba(50, 255, 188, 0.56);
+  --green: #32ffbc;
+  --cyan: #4deaff;
+  --red: #ff5d6c;
+  --amber: #ffb14a;
+  --text: #eafff6;
+  --muted: #8eaaa1;
+  --dim: #496960;
+  box-sizing: border-box;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 68px 1fr 82px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(50, 255, 188, 0.08), transparent 34%),
+    radial-gradient(circle at 75% 35%, rgba(77, 234, 255, 0.06), transparent 30%),
+    var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', monospace;
+  overflow: hidden;
+}
+
+.geo-hud-app *,
+.geo-hud-app *::before,
+.geo-hud-app *::after {
+  box-sizing: border-box;
+}
+
+.geo-hud-app button,
+.geo-hud-app input {
+  font: inherit;
+}
+
+.geo-hud-app button {
+  cursor: pointer;
+}
+
+.geo-hud-app .top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.geo-hud-app .brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.geo-hud-app .logoMark {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--green);
+  box-shadow: 0 0 24px rgba(50, 255, 188, 0.35);
+  position: relative;
+}
+
+.geo-hud-app .logoMark::after {
+  content: '';
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: var(--green);
+  opacity: 0.45;
+}
+
+.geo-hud-app .brand h1 {
+  margin: 0;
+  color: var(--green);
+  letter-spacing: 0.34em;
+  font-size: 20px;
+}
+
+.geo-hud-app .brand p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.geo-hud-app .topRight {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.geo-hud-app .status {
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  padding: 8px 13px;
+  color: var(--green);
+  font-size: 12px;
+  background: rgba(50, 255, 188, 0.05);
+}
+
+.geo-hud-app .main {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr) 340px;
+  gap: 16px;
+  padding: 16px;
+}
+
+.geo-hud-app .panel {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 0 50px rgba(50, 255, 188, 0.06),
+    inset 0 0 40px rgba(50, 255, 188, 0.02);
+  overflow: hidden;
+}
+
+.geo-hud-app .left {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.geo-hud-app .leftHead {
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.geo-hud-app .leftHead h2 {
+  margin: 0 0 8px;
+  color: var(--green);
+  letter-spacing: 0.16em;
+}
+
+.geo-hud-app .leftHead p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+  font-size: 13px;
+}
+
+.geo-hud-app .coreWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 22px;
+  min-height: 0;
+}
+
+.geo-hud-app .core {
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  background: radial-gradient(
+    circle,
+    rgba(50, 255, 188, 0.25),
+    rgba(77, 234, 255, 0.08) 42%,
+    rgba(0, 0, 0, 0.05) 70%
+  );
+  box-shadow: 0 0 70px rgba(50, 255, 188, 0.2);
+}
+
+.geo-hud-app .core::before,
+.geo-hud-app .core::after {
+  content: '';
+  position: absolute;
+  border: 1px dashed rgba(50, 255, 188, 0.35);
+  border-radius: 50%;
+  animation: geo-hud-spin 18s linear infinite;
+}
+
+.geo-hud-app .core::before {
+  inset: -18px;
+}
+
+.geo-hud-app .core::after {
+  inset: -36px;
+  animation-direction: reverse;
+  animation-duration: 28s;
+}
+
+@keyframes geo-hud-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.geo-hud-app .brain-core {
+  position: relative;
+  width: 150px;
+  height: 105px;
+  filter: drop-shadow(0 0 18px rgba(50, 255, 188, 0.85));
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.geo-hud-app .brain-core canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.geo-hud-app .sorenLabel {
+  text-align: center;
+  margin-top: 42px;
+  color: var(--green);
+  font-size: 28px;
+  letter-spacing: 0.35em;
+  font-weight: 900;
+}
+
+.geo-hud-app .sorenMode {
+  color: var(--muted);
+  letter-spacing: 0.16em;
+  font-size: 12px;
+  margin-top: 10px;
+}
+
+.geo-hud-app .leftActions {
+  padding: 16px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+}
+
+.geo-hud-app .btn {
+  border: 1px solid var(--line2);
+  background: rgba(50, 255, 188, 0.08);
+  color: var(--green);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-weight: 900;
+}
+
+.geo-hud-app .btn:hover {
+  background: rgba(50, 255, 188, 0.16);
+}
+
+.geo-hud-app .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.geo-hud-app .btn.secondary {
+  color: var(--text);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.geo-hud-app .btn.amber {
+  color: var(--amber);
+  border-color: rgba(255, 177, 74, 0.55);
+  background: rgba(255, 177, 74, 0.09);
+}
+
+.geo-hud-app .btn.red {
+  color: var(--red);
+  border-color: rgba(255, 93, 108, 0.55);
+  background: rgba(255, 93, 108, 0.08);
+}
+
+.geo-hud-app .center {
+  display: grid;
+  grid-template-rows: 44px 1fr;
+  gap: 14px;
+  min-height: 0;
+}
+
+.geo-hud-app .geo-hud-rail {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.geo-hud-app .geo-hud-step {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 8px 4px;
+}
+
+.geo-hud-app .geo-hud-step.active {
+  color: var(--green);
+  border-color: var(--line2);
+  background: rgba(50, 255, 188, 0.08);
+  box-shadow: 0 0 22px rgba(50, 255, 188, 0.1);
+}
+
+.geo-hud-app .workspace {
+  min-height: 0;
+  position: relative;
+}
+
+.geo-hud-app .screen {
+  height: 100%;
+  overflow: auto;
+  padding: 22px;
+}
+
+.geo-hud-app .hero h2 {
+  font-size: 40px;
+  line-height: 1.1;
+  margin: 0 0 12px;
+  color: var(--green);
+}
+
+.geo-hud-app .hero p,
+.geo-hud-app .screen > p {
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 760px;
+}
+
+.geo-hud-app .urlBox {
+  margin-top: 28px;
+  border: 1px solid var(--line2);
+  border-radius: 18px;
+  background: rgba(50, 255, 188, 0.05);
+  padding: 20px;
+  display: grid;
+  grid-template-columns: 1fr 160px;
+  gap: 14px;
+  align-items: end;
+}
+
+.geo-hud-app .urlBox label {
+  display: block;
+  color: var(--green);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 9px;
+}
+
+.geo-hud-app .urlBox input {
+  width: 100%;
+  font-size: 28px;
+  color: var(--text);
+  background: #061114;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  outline: none;
+}
+
+.geo-hud-app .startCards {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.geo-hud-app .infoCard {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.geo-hud-app .infoCard b {
+  color: var(--green);
+}
+
+.geo-hud-app .infoCard p {
+  color: var(--muted);
+  line-height: 1.45;
+  font-size: 14px;
+  margin: 8px 0 0;
+}
+
+.geo-hud-app .confirmBig {
+  max-width: 850px;
+  margin: 40px auto;
+  border: 1px solid rgba(255, 177, 74, 0.6);
+  border-radius: 22px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 177, 74, 0.12),
+    rgba(50, 255, 188, 0.05)
+  );
+  padding: 26px;
+  text-align: left;
+  box-shadow: 0 0 60px rgba(255, 177, 74, 0.08);
+}
+
+.geo-hud-app .confirmBig label {
+  display: block;
+  color: var(--amber);
+  letter-spacing: 0.16em;
+  font-size: 13px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.geo-hud-app .heard {
+  width: 100%;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  padding: 22px;
+  color: var(--green);
+  font-size: 34px;
+  font-weight: 900;
+}
+
+.geo-hud-app .heard small {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+  margin-top: 8px;
+}
+
+.geo-hud-app .confirmRow {
+  display: grid;
+  grid-template-columns: 90px 1fr 1fr;
+  gap: 14px;
+  align-items: center;
+  margin-top: 18px;
+}
+
+.geo-hud-app .timer {
+  width: 82px;
+  height: 82px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--amber);
+  color: var(--amber);
+  font-size: 34px;
+  font-weight: 900;
+  box-shadow: 0 0 28px rgba(255, 177, 74, 0.18);
+}
+
+.geo-hud-app .editPanel {
+  display: none;
+  margin-top: 18px;
+  border-top: 1px solid rgba(255, 177, 74, 0.32);
+  padding-top: 18px;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+}
+
+.geo-hud-app .editPanel.show {
+  display: grid;
+}
+
+.geo-hud-app .editPanel input {
+  font-size: 22px;
+  color: var(--text);
+  background: #061114;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.geo-hud-app .scanGrid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 22px;
+  align-items: center;
+  height: 100%;
+}
+
+.geo-hud-app .scanGrid h2 {
+  font-size: 38px;
+  color: var(--green);
+  margin: 0 0 14px;
+}
+
+.geo-hud-app .scanGrid p {
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 16px;
+}
+
+.geo-hud-app .scanChecks {
+  display: grid;
+  gap: 12px;
+}
+
+.geo-hud-app .scanCheck {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 15px;
+  background: rgba(50, 255, 188, 0.04);
+  color: #d9fff2;
+}
+
+.geo-hud-app .scanCheck::before {
+  content: '●';
+  color: var(--green);
+  margin-right: 10px;
+}
+
+.geo-hud-app .scoreHead {
+  display: grid;
+  grid-template-columns: 150px 1fr 280px;
+  gap: 20px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 93, 108, 0.08),
+    rgba(50, 255, 188, 0.05)
+  );
+}
+
+.geo-hud-app .ring {
+  width: 130px;
+  height: 130px;
+  margin: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  cursor: pointer;
+}
+
+.geo-hud-app .ring::after {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  background: #061014;
+}
+
+.geo-hud-app .ring span {
+  position: relative;
+  z-index: 1;
+  font-size: 48px;
+  font-weight: 900;
+}
+
+.geo-hud-app .scoreText h2 {
+  margin: 0 0 8px;
+  color: var(--green);
+  font-size: 28px;
+}
+
+.geo-hud-app .scoreText p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.geo-hud-app .summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-right: 18px;
+}
+
+.geo-hud-app .summary button {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  padding: 14px;
+}
+
+.geo-hud-app .summary b {
+  display: block;
+  font-size: 28px;
+}
+
+.geo-hud-app .summary span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.geo-hud-app .findingGrid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.geo-hud-app .finding {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 16px;
+  color: var(--text);
+  text-align: left;
+  min-height: 100px;
+}
+
+.geo-hud-app .finding:hover {
+  background: rgba(50, 255, 188, 0.07);
+}
+
+.geo-hud-app .finding strong {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.geo-hud-app .finding small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.geo-hud-app .badge {
+  float: right;
+  font-weight: 900;
+}
+
+.geo-hud-app .detailDrop {
+  display: none;
+  margin-top: 14px;
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 18px;
+}
+
+.geo-hud-app .detailDrop.show {
+  display: block;
+}
+
+.geo-hud-app .detailDrop h3 {
+  margin: 0 0 10px;
+  color: var(--amber);
+  font-size: 22px;
+}
+
+.geo-hud-app .detailDrop p {
+  line-height: 1.5;
+  color: #d8fff0;
+}
+
+.geo-hud-app .quote {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(50, 255, 188, 0.04);
+  padding: 13px;
+  color: #9bdcc7;
+  margin: 12px 0;
+}
+
+.geo-hud-app .masterHero {
+  border: 1px solid var(--line2);
+  border-radius: 18px;
+  background: linear-gradient(
+    135deg,
+    rgba(50, 255, 188, 0.12),
+    rgba(77, 234, 255, 0.05)
+  );
+  padding: 24px;
+}
+
+.geo-hud-app .masterHero h2 {
+  font-size: 38px;
+  margin: 0 0 10px;
+  color: var(--green);
+}
+
+.geo-hud-app .masterHero p {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.55;
+  max-width: 850px;
+}
+
+.geo-hud-app .beforeAfter {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 14px;
+  max-width: 620px;
+  margin-top: 20px;
+}
+
+.geo-hud-app .ba {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.geo-hud-app .ba span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.geo-hud-app .ba b {
+  font-size: 52px;
+}
+
+.geo-hud-app .arrow {
+  font-size: 42px;
+  color: var(--green);
+  font-weight: 900;
+  display: grid;
+  place-items: center;
+}
+
+.geo-hud-app .execGrid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.geo-hud-app .execCard {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.geo-hud-app .execCard h3 {
+  margin: 0 0 10px;
+  font-size: 22px;
+}
+
+.geo-hud-app .price {
+  font-size: 30px;
+  color: var(--green);
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+.geo-hud-app .execCard p {
+  color: var(--muted);
+  line-height: 1.45;
+  min-height: 88px;
+}
+
+.geo-hud-app .right {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 16px;
+  min-height: 0;
+}
+
+.geo-hud-app .sideBlock {
+  padding: 16px;
+}
+
+.geo-hud-app .sideTitle {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.geo-hud-app .row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  padding: 9px 0;
+}
+
+.geo-hud-app .row b {
+  color: var(--text);
+}
+
+.geo-hud-app .log {
+  height: 100%;
+  min-height: 120px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.geo-hud-app .log p {
+  margin: 0 0 9px;
+}
+
+.geo-hud-app .log b {
+  color: var(--green);
+}
+
+.geo-hud-app .bottom {
+  border-top: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 0 24px;
+}
+
+.geo-hud-app .micZone {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.geo-hud-app .mic {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 2px solid var(--green);
+  background: transparent;
+  color: var(--green);
+  box-shadow: 0 0 24px rgba(50, 255, 188, 0.25);
+  font-size: 24px;
+}
+
+.geo-hud-app .micText b {
+  display: block;
+}
+
+.geo-hud-app .micText span {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+.geo-hud-app .geo-hud-error {
+  color: var(--red);
+  margin-top: 12px;
+}
+
+.geo-hud-audio-unlock {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(77, 234, 255, 0.15);
+  border: 1px solid rgba(77, 234, 255, 0.5);
+  color: var(--cyan);
+  padding: 12px 28px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  z-index: 200;
+}
+
+@media (max-width: 1100px) {
+  .geo-hud-app {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
+  .geo-hud-app .main {
+    grid-template-columns: 1fr;
+  }
+
+  .geo-hud-app .right {
+    grid-template-rows: auto;
+  }
+
+  .geo-hud-app .findingGrid,
+  .geo-hud-app .execGrid,
+  .geo-hud-app .startCards,
+  .geo-hud-app .scanGrid,
+  .geo-hud-app .scoreHead,
+  .geo-hud-app .confirmRow,
+  .geo-hud-app .urlBox {
+    grid-template-columns: 1fr;
+  }
+}
