@@ -41,7 +41,8 @@ export default function SorenApp() {
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
   const [toast, setToast] = useState('The core is visible and breathing softly.');
   const [showFix, setShowFix] = useState(false);
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [, setVoiceEnabled] = useState(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleUrlConfirm = useCallback(
@@ -52,10 +53,34 @@ export default function SorenApp() {
       setShowFix(false);
       setBrainMode('scanning');
       setToast(`Scanning ${url}...`);
-      await runAuditFromChat(url);
+      try {
+        await runAuditFromChat(url);
+      } catch (e) {
+        console.error('[CONFIRM]', e);
+        setToast('Scan failed. Try again.');
+        setBrainMode('idle');
+      }
     },
     [runAuditFromChat, clearFixPackage],
   );
+
+  const runTypedScan = useCallback(async (raw: string) => {
+    if (!raw.trim()) return;
+    const url = raw.startsWith('http') ? raw : `https://${raw}`;
+    setDraft('');
+    clearFixPackage();
+    setShowFix(false);
+    setPendingUrl(null);
+    setBrainMode('scanning');
+    setToast(`Scanning ${url}...`);
+    try {
+      await runAuditFromChat(url);
+    } catch (e) {
+      console.error('[SCAN]', e);
+      setToast('Scan failed. Try again.');
+      setBrainMode('idle');
+    }
+  }, [clearFixPackage, runAuditFromChat]);
 
   const handleSTTResult = useCallback(
     async (text: string) => {
@@ -88,26 +113,38 @@ export default function SorenApp() {
       setBrainMode('speaking');
       return;
     }
-    if (isThinking) {
-      setBrainMode('thinking');
-      return;
-    }
     if (stt.state === 'listening') {
       setBrainMode('listening');
-      return;
-    }
-    if (auditResult && !showFix) {
-      setBrainMode('results');
       return;
     }
     if (showFix) {
       setBrainMode('repair');
       return;
     }
-    if (voiceEnabled) {
-      setBrainMode('idle');
+    if (auditResult && !showFix) {
+      setBrainMode('results');
+      return;
     }
-  }, [isSpeaking, isThinking, stt.state, auditResult, showFix, voiceEnabled]);
+    setBrainMode((prev) => {
+      if (prev === 'scanning') return prev;
+      if (isThinking) return 'thinking';
+      return 'idle';
+    });
+  }, [isSpeaking, isThinking, stt.state, auditResult, showFix]);
+
+  useEffect(() => {
+    if (stt.transcript) {
+      setToast(`I heard: "${stt.transcript}"`);
+    }
+  }, [stt.transcript]);
+
+  useEffect(() => {
+    const unlock = () => {
+      setAudioUnlocked(true);
+      document.removeEventListener('click', unlock);
+    };
+    document.addEventListener('click', unlock, { once: true });
+  }, []);
 
   useEffect(() => {
     if (messages.length === 0) return;
@@ -149,19 +186,21 @@ export default function SorenApp() {
   }, [auditResult, fixPackage, restoreFixPackage]);
 
   const handleMicClick = useCallback(() => {
-    if (!voiceEnabled) {
-      setVoiceEnabled(true);
-      return;
-    }
     if (stt.state === 'listening') {
       stt.stopListening();
       return;
     }
+    setVoiceEnabled(true);
     stop();
     setTimeout(() => {
-      stt.startListening();
-    }, 300);
-  }, [voiceEnabled, stt, stop]);
+      try {
+        stt.startListening();
+      } catch (e) {
+        console.error('[MIC]', e);
+        setToast('Microphone error. Check browser permissions.');
+      }
+    }, 350);
+  }, [stt, stop]);
 
   const handleFixIt = useCallback(() => {
     if (!auditResult) return;
@@ -466,12 +505,30 @@ export default function SorenApp() {
                   : '0',
               }}
             >
-              {!voiceEnabled
-                ? '▶ Activate Soren'
-                : stt.state === 'listening'
-                  ? '⬛ Stop listening'
-                  : '🎙 Speak'}
+              {stt.state === 'listening' ? '⬛ Stop' : '🎙 Speak'}
             </button>
+            {stt.state === 'listening' && (
+              <p style={{
+                fontSize: 12,
+                color: 'var(--cyan)',
+                textAlign: 'center',
+                margin: '6px 0 0',
+              }}
+              >
+                Speak now — I&apos;m listening
+              </p>
+            )}
+            {brainMode === 'scanning' && (
+              <p style={{
+                fontSize: 12,
+                color: 'var(--muted)',
+                textAlign: 'center',
+                margin: '6px 0 0',
+              }}
+              >
+                Scanning...
+              </p>
+            )}
 
             {auditResult && !showFix && (
               <button
@@ -524,14 +581,7 @@ export default function SorenApp() {
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && draft.trim()) {
-                    const raw = draft.trim();
-                    const url = raw.startsWith('http') ? raw : `https://${raw}`;
-                    setDraft('');
-                    clearFixPackage();
-                    setShowFix(false);
-                    setPendingUrl(url);
-                    setBrainMode('thinking');
-                    timerRef.current = setTimeout(() => handleUrlConfirm(url), 3000);
+                    void runTypedScan(draft.trim());
                   }
                 }}
                 placeholder="varshyl.com"
@@ -547,16 +597,24 @@ export default function SorenApp() {
               />
               <button
                 type="button"
-                onClick={() => {
-                  if (!draft.trim()) return;
+                onClick={async () => {
                   const raw = draft.trim();
-                  const url = raw.startsWith('http') ? raw : `https://${raw}`;
+                  if (!raw) return;
+                  const url = raw.startsWith('http')
+                    ? raw : `https://${raw}`;
                   setDraft('');
                   clearFixPackage();
                   setShowFix(false);
-                  setPendingUrl(url);
-                  setBrainMode('thinking');
-                  timerRef.current = setTimeout(() => handleUrlConfirm(url), 3000);
+                  setPendingUrl(null);
+                  setBrainMode('scanning');
+                  setToast(`Scanning ${url}...`);
+                  try {
+                    await runAuditFromChat(url);
+                  } catch (e) {
+                    console.error('[SCAN]', e);
+                    setToast('Scan failed. Try again.');
+                    setBrainMode('idle');
+                  }
                 }}
                 style={{
                   border: 0,
@@ -572,6 +630,17 @@ export default function SorenApp() {
                 Scan
               </button>
             </div>
+            {!audioUnlocked && (
+              <p style={{
+                fontSize: 11,
+                color: 'var(--muted)',
+                textAlign: 'center',
+                marginTop: 8,
+              }}
+              >
+                Click anywhere to enable voice
+              </p>
+            )}
           </div>
         </aside>
 

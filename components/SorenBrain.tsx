@@ -39,6 +39,7 @@ export function SorenBrain({ mode, findings = [] }: SorenBrainProps) {
     let CY = 0;
     let DPR = 1;
     let t = 0;
+    let frameCount = 0;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const c2d = ctx;
@@ -89,7 +90,7 @@ export function SorenBrain({ mode, findings = [] }: SorenBrainProps) {
     };
     const nodes: Node[] = [];
     let tries = 0;
-    while (nodes.length < 1250 && tries < 150000) {
+    while (nodes.length < 380 && tries < 50000) {
       tries++;
       const x = -290 + rnd(tries) * 580;
       const y = -170 + rnd(tries + 22) * 330;
@@ -107,7 +108,7 @@ export function SorenBrain({ mode, findings = [] }: SorenBrainProps) {
     }
 
     const impulses: { idx: number; phase: number; speed: number; c: number }[] = [];
-    for (let i = 0; i < 180; i++) {
+    for (let i = 0; i < 50; i++) {
       impulses.push({
         idx: Math.floor(rnd(i + 1) * nodes.length),
         phase: rnd(i + 2) * 6.283,
@@ -204,6 +205,7 @@ export function SorenBrain({ mode, findings = [] }: SorenBrainProps) {
       const orbs = findingsRef.current;
       const [speed, energy, wave, site, showOrbs] = getState(m);
       t += 0.012;
+      frameCount++;
       c2d.clearRect(0, 0, W, H);
 
       const bg = c2d.createRadialGradient(CX, CY, 0, CX, CY, Math.min(W, H) * 0.55);
@@ -229,18 +231,20 @@ export function SorenBrain({ mode, findings = [] }: SorenBrainProps) {
       })).sort((a, b) => a.z - b.z);
 
       const maxDist = m === 'thinking' || m === 'repair' ? 54 : 44;
-      for (let i = 0; i < pts.length; i++) {
-        for (let j = i + 1; j < pts.length; j++) {
-          const dx = pts[i].x - pts[j].x;
-          const dy = pts[i].y - pts[j].y;
-          const d = Math.hypot(dx, dy);
-          if (d < maxDist) {
-            c2d.strokeStyle = `rgba(77,234,255,${(1 - d / maxDist) * 0.2 * energy})`;
-            c2d.lineWidth = 0.55;
-            c2d.beginPath();
-            c2d.moveTo(pts[i].x, pts[i].y);
-            c2d.lineTo(pts[j].x, pts[j].y);
-            c2d.stroke();
+      if (frameCount % 2 === 0) {
+        for (let i = 0; i < pts.length; i++) {
+          for (let j = i + 1; j < pts.length; j++) {
+            const dx = pts[i].x - pts[j].x;
+            const dy = pts[i].y - pts[j].y;
+            const d = Math.hypot(dx, dy);
+            if (d < maxDist) {
+              c2d.strokeStyle = `rgba(77,234,255,${(1 - d / maxDist) * 0.2 * energy})`;
+              c2d.lineWidth = 0.55;
+              c2d.beginPath();
+              c2d.moveTo(pts[i].x, pts[i].y);
+              c2d.lineTo(pts[j].x, pts[j].y);
+              c2d.stroke();
+            }
           }
         }
       }
@@ -343,7 +347,9 @@ export function SorenBrain({ mode, findings = [] }: SorenBrainProps) {
         c2d.stroke();
       }
 
-      animId = requestAnimationFrame(draw);
+      animId = requestAnimationFrame(() => {
+        setTimeout(draw, 20);
+      });
     }
     draw();
 
