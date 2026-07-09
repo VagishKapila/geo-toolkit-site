@@ -3,14 +3,30 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SorenBrain, type BrainMode } from '../components/SorenBrain';
 import { FixDeliveryCards } from '../components/FixDeliveryCards';
-import { useSorenVoice } from '../hooks/useSorenVoice';
-import { useSorenSTT } from '../hooks/useSorenSTT';
-import { useSorenChat, type AuditResult } from '../hooks/useSorenChat';
+import { useLiveKitSoren } from '../hooks/useLiveKitSoren';
 import { useCredits } from '../hooks/useCredits';
 import { cleanForSpeech } from '../lib/cleanForSpeech';
 
+const GEO_URL =
+  'https://toolkit-demo-host-production-ac14.up.railway.app/api/geo-audit';
 const FIX_URL =
   'https://toolkit-demo-host-production-ac14.up.railway.app/api/soren/fix';
+
+interface AuditResult {
+  url: string;
+  score: number;
+  grade: string;
+  topFixes: string[];
+  checks: { name: string; passed: boolean; maxPoints: number; tip?: string }[];
+}
+
+interface FixPackage {
+  platform: string;
+  summary: string;
+  files: { filename: string; description: string; content: string }[];
+  instructions: { title: string; detail: string }[];
+  sorenSays: string;
+}
 
 type AuditWithPlatform = AuditResult & { platform?: string };
 
@@ -27,21 +43,11 @@ function displayUrl(url: string): string {
 }
 
 export default function SorenApp() {
-  const { speak, stop, isSpeaking, isMuted, toggleMute } = useSorenVoice();
-
-  const speakOnce = useCallback((text: string) => {
-    speak(cleanForSpeech(text));
-  }, [speak]);
-
-  const {
-    messages, auditResult, fixPackage,
-    isThinking, sendMessage,
-    runAuditFromChat, clearFixPackage, restoreFixPackage, reset,
-  } = useSorenChat((reply: string) => {
-    speakOnce(reply);
-  });
-
   const { email, balance, saveEmail, fetchBalance } = useCredits();
+
+  const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
+  const [fixPackage, setFixPackage] = useState<FixPackage | null>(null);
+  const [isThinking, setIsThinking] = useState(false);
 
   const [brainMode, setBrainMode] = useState<BrainMode>('idle');
   const [draft, setDraft] = useState('varshyl.com');
@@ -54,9 +60,52 @@ export default function SorenApp() {
   const [logs, setLogs] = useState<string[]>([INTRO]);
   const confirmTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const lk = useLiveKitSoren((s) => {
+    if (s === 'speaking') setBrainMode('speaking');
+    if (s === 'listening') {
+      setBrainMode((prev) =>
+        prev === 'results' || prev === 'repair' || prev === 'scanning'
+          ? prev
+          : 'idle',
+      );
+    }
+  });
+
   const appendLog = useCallback((text: string) => {
     setLogs((prev) => [...prev, text]);
   }, []);
+
+  const clearFixPackage = useCallback(() => setFixPackage(null), []);
+  const restoreFixPackage = useCallback((pkg: FixPackage) => setFixPackage(pkg), []);
+
+  const resetAudit = useCallback(() => {
+    setAuditResult(null);
+    setFixPackage(null);
+  }, []);
+
+  const runAudit = useCallback(
+    async (url: string) => {
+      setIsThinking(true);
+      try {
+        const res = await fetch(GEO_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const data = (await res.json()) as AuditResult;
+        setAuditResult(data);
+        const summary = `I checked ${url}. Score: ${data.score}/100, grade ${data.grade}.`;
+        appendLog(summary);
+      } catch (e) {
+        console.error('[AUDIT]', e);
+        appendLog('I could not reach that site. Make sure it is live and try again.');
+        throw e;
+      } finally {
+        setIsThinking(false);
+      }
+    },
+    [appendLog],
+  );
 
   const clearConfirmTimer = useCallback(() => {
     if (confirmTimerRef.current) {
@@ -75,18 +124,16 @@ export default function SorenApp() {
       setBrainMode('scanning');
       appendLog(`Scanning ${url}...`);
       try {
-        await runAuditFromChat(url);
-      } catch (e) {
-        console.error('[CONFIRM]', e);
-        appendLog('Scan failed. Try again.');
+        await runAudit(url);
+      } catch {
         setBrainMode('idle');
       }
     },
-    [appendLog, runAuditFromChat, clearFixPackage, clearConfirmTimer],
+    [appendLog, runAudit, clearFixPackage, clearConfirmTimer],
   );
 
   const beginConfirm = useCallback((raw: string) => {
-    reset();
+    resetAudit();
     clearFixPackage();
     setShowFix(false);
     setOpenCheck(null);
@@ -99,26 +146,7 @@ export default function SorenApp() {
     setBrainMode('confirming');
     const line = `I heard ${displayUrl(url)}. I will start in five seconds unless you edit it.`;
     appendLog(line);
-    speakOnce(line);
-  }, [appendLog, speakOnce, reset, clearFixPackage]);
-
-  const handleSTTResult = useCallback(
-    async (text: string) => {
-      const urlMatch = text.match(
-        /(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/\S*)?)/i,
-      );
-      if (urlMatch) {
-        beginConfirm(urlMatch[0]);
-        return;
-      }
-      setBrainMode('thinking');
-      appendLog('Thinking...');
-      await sendMessage(text);
-    },
-    [beginConfirm, sendMessage, appendLog],
-  );
-
-  const stt = useSorenSTT(handleSTTResult);
+  }, [appendLog, resetAudit, clearFixPackage]);
 
   useEffect(() => {
     if (!pendingUrl || editOpen) {
@@ -141,12 +169,16 @@ export default function SorenApp() {
   }, [pendingUrl, editOpen, handleUrlConfirm, clearConfirmTimer]);
 
   useEffect(() => {
-    if (isSpeaking) {
+    if (lk.state === 'speaking') {
       setBrainMode('speaking');
       return;
     }
-    if (stt.state === 'listening') {
-      setBrainMode('listening');
+    if (lk.state === 'listening' && lk.isConnected) {
+      setBrainMode((prev) =>
+        prev === 'results' || prev === 'repair' || prev === 'scanning'
+          ? prev
+          : 'listening',
+      );
       return;
     }
     if (pendingUrl && !auditResult) {
@@ -167,23 +199,9 @@ export default function SorenApp() {
       return 'idle';
     });
   }, [
-    isSpeaking, isThinking, stt.state, auditResult,
+    lk.state, lk.isConnected, isThinking, auditResult,
     showFix, pendingUrl, editOpen,
   ]);
-
-  useEffect(() => {
-    if (stt.transcript) {
-      appendLog(`I heard: "${stt.transcript}"`);
-    }
-  }, [stt.transcript, appendLog]);
-
-  useEffect(() => {
-    if (messages.length === 0) return;
-    const last = messages[messages.length - 1];
-    if (last.role === 'assistant') {
-      appendLog(last.content);
-    }
-  }, [messages, appendLog]);
 
   useEffect(() => {
     if (!auditResult) return;
@@ -217,24 +235,6 @@ export default function SorenApp() {
       .catch((e) => console.error('[FIX prefetch]', e));
   }, [auditResult, fixPackage, restoreFixPackage]);
 
-  const handleMicClick = useCallback(() => {
-    if (stt.state === 'listening') {
-      stt.stopListening();
-      return;
-    }
-    stop();
-    setTimeout(() => {
-      try {
-        stt.startListening();
-        appendLog('I am listening. Say the website.');
-        speakOnce('I am listening. Say the website.');
-      } catch (e) {
-        console.error('[MIC]', e);
-        appendLog('Microphone error. Check browser permissions.');
-      }
-    }, 350);
-  }, [stt, stop, appendLog, speakOnce]);
-
   const pauseForEdit = useCallback(() => {
     clearConfirmTimer();
     setEditOpen(true);
@@ -266,26 +266,16 @@ export default function SorenApp() {
     setShowFix(true);
     setBrainMode('repair');
     appendLog('Master Repair Plan ready. Choose how you want to proceed.');
-    speakOnce('I have your repair plan ready. Choose how you would like to proceed.');
-  }, [auditResult, speakOnce, appendLog]);
+  }, [auditResult, appendLog]);
 
   const toggleCheck = useCallback((name: string, tip: string, passed: boolean) => {
     setOpenCheck((prev) => (prev === name ? null : name));
-    if (!passed && tip) {
-      appendLog(tip);
-      speakOnce(tip);
-    }
-  }, [appendLog, speakOnce]);
+    if (!passed && tip) appendLog(tip);
+  }, [appendLog]);
 
-  useEffect(() => {
-    if (!messages.length || !auditResult) return;
-    const last = messages[messages.length - 1];
-    if (last.role !== 'user') return;
-    const txt = last.content.toLowerCase();
-    if (txt.includes('fix') || txt.includes('yes') || txt.includes('do it') || txt.includes('repair')) {
-      handleFixIt();
-    }
-  }, [messages, auditResult, handleFixIt]);
+  const speakLog = useCallback((text: string) => {
+    appendLog(cleanForSpeech(text));
+  }, [appendLog]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -295,7 +285,7 @@ export default function SorenApp() {
       if (urlEmail) {
         saveEmail(urlEmail);
         void fetchBalance(urlEmail).then(() => {
-          speakOnce('Your credits are ready. Want me to apply the fix now?');
+          appendLog('Your credits are ready. Want me to apply the fix now?');
         });
       }
       const pending = sessionStorage.getItem('soren_pending_fix');
@@ -324,7 +314,7 @@ export default function SorenApp() {
             a.download = `soren-fix-${pkgData.platform}.txt`;
             a.click();
             URL.revokeObjectURL(url);
-            speakOnce('Your AI package is downloading. Paste the prompt into ChatGPT.');
+            appendLog('Your AI package is downloading. Paste the prompt into ChatGPT.');
           });
       }
     }
@@ -333,10 +323,74 @@ export default function SorenApp() {
     if (callSuccess === 'true' && calendly) {
       window.history.replaceState({}, '', window.location.pathname);
       window.open(decodeURIComponent(calendly), '_blank');
-      speakOnce('Payment confirmed. Your booking page just opened.');
+      appendLog('Payment confirmed. Your booking page just opened.');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const voiceButton = !lk.isConnected ? (
+    <button
+      type="button"
+      onClick={() => void lk.connect()}
+      style={{
+        width: '100%',
+        border: 0,
+        borderRadius: 16,
+        padding: 14,
+        fontWeight: 800,
+        cursor: 'pointer',
+        letterSpacing: '.04em',
+        textTransform: 'uppercase' as const,
+        fontSize: 13,
+        marginBottom: 8,
+        background: 'linear-gradient(135deg,var(--cyan),#91f9ff)',
+        color: '#041014',
+      }}
+    >
+      {lk.state === 'connecting' ? '⟳ Connecting...' : '▶ Talk to Soren'}
+    </button>
+  ) : (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+      <button
+        type="button"
+        onClick={lk.disconnect}
+        style={{
+          flex: 1,
+          borderRadius: 16,
+          padding: 14,
+          fontWeight: 800,
+          cursor: 'pointer',
+          fontSize: 13,
+          background: lk.state === 'speaking'
+            ? 'rgba(99,255,163,.15)'
+            : 'rgba(255,95,210,.15)',
+          border: `1px solid ${lk.state === 'speaking'
+            ? 'rgba(99,255,163,.5)'
+            : 'rgba(255,95,210,.5)'}`,
+          color: lk.state === 'speaking' ? 'var(--green)' : 'var(--pink)',
+        }}
+      >
+        {lk.state === 'speaking'
+          ? '● Soren speaking'
+          : '🎙 Listening — speak naturally'}
+      </button>
+      <button
+        type="button"
+        onClick={() => void lk.toggleMute()}
+        style={{
+          padding: '14px 16px',
+          border: '1px solid var(--line)',
+          borderRadius: 16,
+          background: 'rgba(255,255,255,.04)',
+          color: lk.isMuted ? 'var(--red)' : 'var(--muted)',
+          cursor: 'pointer',
+          fontSize: 16,
+        }}
+      >
+        {lk.isMuted ? '🔇' : '🎙'}
+      </button>
+    </div>
+  );
 
   const findings = auditResult?.checks?.map((c, i) => ({
     label: c.name.split(' ')[0].slice(0, 4).toUpperCase(),
@@ -422,14 +476,16 @@ export default function SorenApp() {
                 credits
               </span>
             )}
-            <button
-              type="button"
-              onClick={toggleMute}
-              className="soren-pill"
-              style={{ cursor: 'pointer', color: isMuted ? 'var(--red)' : 'var(--green)' }}
-            >
-              {isMuted ? '🔇 Muted' : '🔊 Sound'}
-            </button>
+            {lk.isConnected && (
+              <button
+                type="button"
+                onClick={() => void lk.toggleMute()}
+                className="soren-pill"
+                style={{ cursor: 'pointer', color: lk.isMuted ? 'var(--red)' : 'var(--green)' }}
+              >
+                {lk.isMuted ? '🔇 Muted' : '🔊 Sound'}
+              </button>
+            )}
             <span className="soren-pill soren-pill-live">
               ●
               {' '}
@@ -505,21 +561,20 @@ export default function SorenApp() {
                 }}
                 placeholder="varshyl.com"
               />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 58px', gap: 10, marginTop: 10 }}>
-                <button type="button" className="soren-btn soren-btn-primary" onClick={handleMicClick}>
-                  {stt.state === 'listening' ? '⬛ Stop' : '🎙 Speak Website'}
-                </button>
-                <button
-                  type="button"
-                  className="soren-btn soren-btn-ghost"
-                  onClick={() => {
-                    speakOnce(INTRO);
-                    appendLog(INTRO);
-                  }}
+              {voiceButton}
+              {lk.error && (
+                <p style={{
+                  fontSize: 11,
+                  color: 'var(--red)',
+                  textAlign: 'center',
+                  margin: '4px 0 8px',
+                }}
                 >
-                  🎙
-                </button>
-              </div>
+                  ⚠
+                  {' '}
+                  {lk.error}
+                </p>
+              )}
               <button
                 type="button"
                 className="soren-btn soren-btn-primary"
@@ -547,13 +602,17 @@ export default function SorenApp() {
                     </p>
                   </div>
                   <div style={{ display: 'grid', gap: 10 }}>
-                    <button type="button" className="soren-btn soren-btn-primary" onClick={handleMicClick}>
+                    <button
+                      type="button"
+                      className="soren-btn soren-btn-primary"
+                      onClick={() => void lk.connect()}
+                    >
                       Start voice flow
                     </button>
                     <button
                       type="button"
                       className="soren-btn soren-btn-ghost"
-                      onClick={() => { speakOnce(INTRO); appendLog(INTRO); }}
+                      onClick={() => appendLog(INTRO)}
                     >
                       Hear Soren intro
                     </button>
@@ -666,7 +725,7 @@ export default function SorenApp() {
                                   <button
                                     type="button"
                                     className="soren-btn soren-btn-ghost"
-                                    onClick={() => speakOnce(c.tip ?? c.name)}
+                                    onClick={() => appendLog(c.tip ?? c.name)}
                                   >
                                     Explain
                                   </button>
@@ -723,7 +782,7 @@ export default function SorenApp() {
             clearFixPackage();
             setBrainMode('results');
           }}
-          speak={speakOnce}
+          speak={speakLog}
         />
       )}
     </>
