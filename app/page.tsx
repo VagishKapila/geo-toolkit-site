@@ -14,10 +14,20 @@ const FIX_URL =
 
 type AuditWithPlatform = AuditResult & { platform?: string };
 
+const INTRO =
+  'Good afternoon, Sir. Say the website and I will confirm it before I run the audit.';
+
+function normalizeUrl(raw: string): string {
+  const t = raw.trim();
+  return t.startsWith('http') ? t : `https://${t}`;
+}
+
+function displayUrl(url: string): string {
+  return url.replace(/^https?:\/\//, '');
+}
+
 export default function SorenApp() {
-  const {
-    speak, stop, isSpeaking, isMuted, toggleMute,
-  } = useSorenVoice();
+  const { speak, stop, isSpeaking, isMuted, toggleMute } = useSorenVoice();
 
   const speakOnce = useCallback((text: string) => {
     speak(cleanForSpeech(text));
@@ -26,87 +36,109 @@ export default function SorenApp() {
   const {
     messages, auditResult, fixPackage,
     isThinking, sendMessage,
-    runAuditFromChat, clearFixPackage, restoreFixPackage,
+    runAuditFromChat, clearFixPackage, restoreFixPackage, reset,
   } = useSorenChat((reply: string) => {
     speakOnce(reply);
   });
 
-  const {
-    email, balance, saveEmail,
-    fetchBalance,
-  } = useCredits();
+  const { email, balance, saveEmail, fetchBalance } = useCredits();
 
   const [brainMode, setBrainMode] = useState<BrainMode>('idle');
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState('varshyl.com');
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
-  const [toast, setToast] = useState('The core is visible and breathing softly.');
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState('');
+  const [confirmSeconds, setConfirmSeconds] = useState(5);
   const [showFix, setShowFix] = useState(false);
-  const [, setVoiceEnabled] = useState(false);
-  const [audioUnlocked, setAudioUnlocked] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [openCheck, setOpenCheck] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([INTRO]);
+  const confirmTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const appendLog = useCallback((text: string) => {
+    setLogs((prev) => [...prev, text]);
+  }, []);
+
+  const clearConfirmTimer = useCallback(() => {
+    if (confirmTimerRef.current) {
+      clearInterval(confirmTimerRef.current);
+      confirmTimerRef.current = null;
+    }
+  }, []);
 
   const handleUrlConfirm = useCallback(
     async (url: string) => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      clearConfirmTimer();
       setPendingUrl(null);
+      setEditOpen(false);
       clearFixPackage();
       setShowFix(false);
       setBrainMode('scanning');
-      setToast(`Scanning ${url}...`);
+      appendLog(`Scanning ${url}...`);
       try {
         await runAuditFromChat(url);
       } catch (e) {
         console.error('[CONFIRM]', e);
-        setToast('Scan failed. Try again.');
+        appendLog('Scan failed. Try again.');
         setBrainMode('idle');
       }
     },
-    [runAuditFromChat, clearFixPackage],
+    [appendLog, runAuditFromChat, clearFixPackage, clearConfirmTimer],
   );
 
-  const runTypedScan = useCallback(async (raw: string) => {
-    if (!raw.trim()) return;
-    const url = raw.startsWith('http') ? raw : `https://${raw}`;
-    setDraft('');
+  const beginConfirm = useCallback((raw: string) => {
+    reset();
     clearFixPackage();
     setShowFix(false);
-    setPendingUrl(null);
-    setBrainMode('scanning');
-    setToast(`Scanning ${url}...`);
-    try {
-      await runAuditFromChat(url);
-    } catch (e) {
-      console.error('[SCAN]', e);
-      setToast('Scan failed. Try again.');
-      setBrainMode('idle');
-    }
-  }, [clearFixPackage, runAuditFromChat]);
+    setOpenCheck(null);
+    const url = normalizeUrl(raw);
+    setDraft(displayUrl(url));
+    setPendingUrl(url);
+    setEditDraft(displayUrl(url));
+    setEditOpen(false);
+    setConfirmSeconds(5);
+    setBrainMode('confirming');
+    const line = `I heard ${displayUrl(url)}. I will start in five seconds unless you edit it.`;
+    appendLog(line);
+    speakOnce(line);
+  }, [appendLog, speakOnce, reset, clearFixPackage]);
 
   const handleSTTResult = useCallback(
     async (text: string) => {
-      setToast(`I heard: ${text}`);
-
       const urlMatch = text.match(
         /(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/\S*)?)/i,
       );
       if (urlMatch) {
-        const raw = urlMatch[0];
-        const norm = raw.startsWith('http') ? raw : `https://${raw}`;
-        setPendingUrl(norm);
-        setBrainMode('thinking');
-        setToast(`I heard ${norm}. Confirming...`);
-        timerRef.current = setTimeout(() => handleUrlConfirm(norm), 3000);
+        beginConfirm(urlMatch[0]);
         return;
       }
-
       setBrainMode('thinking');
-      setToast('Thinking...');
+      appendLog('Thinking...');
       await sendMessage(text);
     },
-    [sendMessage, handleUrlConfirm],
+    [beginConfirm, sendMessage, appendLog],
   );
 
   const stt = useSorenSTT(handleSTTResult);
+
+  useEffect(() => {
+    if (!pendingUrl || editOpen) {
+      clearConfirmTimer();
+      return;
+    }
+    setConfirmSeconds(5);
+    clearConfirmTimer();
+    confirmTimerRef.current = setInterval(() => {
+      setConfirmSeconds((s) => {
+        if (s <= 1) {
+          clearConfirmTimer();
+          void handleUrlConfirm(pendingUrl);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return clearConfirmTimer;
+  }, [pendingUrl, editOpen, handleUrlConfirm, clearConfirmTimer]);
 
   useEffect(() => {
     if (isSpeaking) {
@@ -115,6 +147,10 @@ export default function SorenApp() {
     }
     if (stt.state === 'listening') {
       setBrainMode('listening');
+      return;
+    }
+    if (pendingUrl && !auditResult) {
+      setBrainMode(editOpen ? 'idle' : 'confirming');
       return;
     }
     if (showFix) {
@@ -130,37 +166,33 @@ export default function SorenApp() {
       if (isThinking) return 'thinking';
       return 'idle';
     });
-  }, [isSpeaking, isThinking, stt.state, auditResult, showFix]);
+  }, [
+    isSpeaking, isThinking, stt.state, auditResult,
+    showFix, pendingUrl, editOpen,
+  ]);
 
   useEffect(() => {
     if (stt.transcript) {
-      setToast(`I heard: "${stt.transcript}"`);
+      appendLog(`I heard: "${stt.transcript}"`);
     }
-  }, [stt.transcript]);
-
-  useEffect(() => {
-    const unlock = () => {
-      setAudioUnlocked(true);
-      document.removeEventListener('click', unlock);
-    };
-    document.addEventListener('click', unlock, { once: true });
-  }, []);
+  }, [stt.transcript, appendLog]);
 
   useEffect(() => {
     if (messages.length === 0) return;
     const last = messages[messages.length - 1];
     if (last.role === 'assistant') {
-      setToast(last.content);
+      appendLog(last.content);
     }
-  }, [messages]);
+  }, [messages, appendLog]);
 
   useEffect(() => {
     if (!auditResult) return;
     const failing = auditResult.checks?.filter((c) => !c.passed).length ?? 0;
-    setToast(
+    appendLog(
       `Analysis complete. Score: ${auditResult.score}/100. ` +
       `${failing} signal${failing !== 1 ? 's' : ''} need fixing.`,
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auditResult]);
 
   useEffect(() => {
@@ -175,14 +207,14 @@ export default function SorenApp() {
       body: JSON.stringify({
         platform,
         failingChecks: failing.map((c) => ({ name: c.name, tip: c.tip ?? '' })),
-        siteUrl: auditResult.url,
+        siteInfo: { url: auditResult.url },
       }),
     })
       .then((r) => r.json())
       .then((pkg) => {
         if (pkg?.files) restoreFixPackage(pkg);
       })
-      .catch(() => { /* prefetch is best-effort */ });
+      .catch((e) => console.error('[FIX prefetch]', e));
   }, [auditResult, fixPackage, restoreFixPackage]);
 
   const handleMicClick = useCallback(() => {
@@ -190,46 +222,73 @@ export default function SorenApp() {
       stt.stopListening();
       return;
     }
-    setVoiceEnabled(true);
     stop();
     setTimeout(() => {
       try {
         stt.startListening();
+        appendLog('I am listening. Say the website.');
+        speakOnce('I am listening. Say the website.');
       } catch (e) {
         console.error('[MIC]', e);
-        setToast('Microphone error. Check browser permissions.');
+        appendLog('Microphone error. Check browser permissions.');
       }
     }, 350);
-  }, [stt, stop]);
+  }, [stt, stop, appendLog, speakOnce]);
+
+  const pauseForEdit = useCallback(() => {
+    clearConfirmTimer();
+    setEditOpen(true);
+    setBrainMode('idle');
+    appendLog('Timer paused. Edit the website spelling, then save and continue.');
+  }, [clearConfirmTimer, appendLog]);
+
+  const saveEdit = useCallback(() => {
+    const url = normalizeUrl(editDraft);
+    setPendingUrl(url);
+    setDraft(displayUrl(url));
+    setEditOpen(false);
+    appendLog(`Saved ${displayUrl(url)}. Continuing now.`);
+    void handleUrlConfirm(url);
+  }, [editDraft, appendLog, handleUrlConfirm]);
+
+  const confirmNow = useCallback(() => {
+    if (!pendingUrl) return;
+    void handleUrlConfirm(pendingUrl);
+  }, [pendingUrl, handleUrlConfirm]);
+
+  const submitTypedUrl = useCallback(() => {
+    if (!draft.trim()) return;
+    beginConfirm(draft.trim());
+  }, [draft, beginConfirm]);
 
   const handleFixIt = useCallback(() => {
     if (!auditResult) return;
     setShowFix(true);
     setBrainMode('repair');
-    setToast('Master Repair Plan ready.');
-    speakOnce(
-      'I have your repair plan ready. Choose how you would like to proceed.',
-    );
-  }, [auditResult, speakOnce]);
+    appendLog('Master Repair Plan ready. Choose how you want to proceed.');
+    speakOnce('I have your repair plan ready. Choose how you would like to proceed.');
+  }, [auditResult, speakOnce, appendLog]);
+
+  const toggleCheck = useCallback((name: string, tip: string, passed: boolean) => {
+    setOpenCheck((prev) => (prev === name ? null : name));
+    if (!passed && tip) {
+      appendLog(tip);
+      speakOnce(tip);
+    }
+  }, [appendLog, speakOnce]);
 
   useEffect(() => {
     if (!messages.length || !auditResult) return;
     const last = messages[messages.length - 1];
     if (last.role !== 'user') return;
     const txt = last.content.toLowerCase();
-    if (
-      txt.includes('fix') ||
-      txt.includes('yes') ||
-      txt.includes('do it') ||
-      txt.includes('repair')
-    ) {
+    if (txt.includes('fix') || txt.includes('yes') || txt.includes('do it') || txt.includes('repair')) {
       handleFixIt();
     }
   }, [messages, auditResult, handleFixIt]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-
     if (params.get('credits_success') === 'true') {
       window.history.replaceState({}, '', window.location.pathname);
       const urlEmail = params.get('email');
@@ -246,7 +305,6 @@ export default function SorenApp() {
         setBrainMode('repair');
       }
     }
-
     const aiSuccess = params.get('ai_package_success');
     if (aiSuccess === 'true') {
       window.history.replaceState({}, '', window.location.pathname);
@@ -256,11 +314,7 @@ export default function SorenApp() {
         const pkgData = JSON.parse(saved);
         void fetch(
           'https://toolkit-demo-host-production-ac14.up.railway.app/api/soren/fix/ai-package',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(pkgData),
-          },
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pkgData) },
         )
           .then((r) => r.blob())
           .then((blob) => {
@@ -270,13 +324,10 @@ export default function SorenApp() {
             a.download = `soren-fix-${pkgData.platform}.txt`;
             a.click();
             URL.revokeObjectURL(url);
-            speakOnce(
-              'Your AI package is downloading. Paste the prompt into ChatGPT. Your AI will guide you through the rest.',
-            );
+            speakOnce('Your AI package is downloading. Paste the prompt into ChatGPT.');
           });
       }
     }
-
     const callSuccess = params.get('call_success');
     const calendly = params.get('calendly');
     if (callSuccess === 'true' && calendly) {
@@ -295,42 +346,8 @@ export default function SorenApp() {
   })) ?? [];
 
   const auditPlatform = auditResult
-    ? (auditResult as AuditWithPlatform).platform ?? '—'
-    : '—';
-
-  const readout: Record<BrainMode, [string, string]> = {
-    idle: [
-      'Idle intelligence',
-      'The core is breathing softly. Say a website name or type it below.',
-    ],
-    listening: [
-      'Listening',
-      'Voice input is active. Speak the website.',
-    ],
-    thinking: [
-      'Thinking',
-      'The network is interpreting your request.',
-    ],
-    scanning: [
-      'Scanning site',
-      `Checking ${auditResult?.url ?? 'the site'} across GEO, ADA, and monitoring.`,
-    ],
-    results: [
-      'Results ready',
-      `Score: ${auditResult?.score ?? '—'}/100. ` +
-      `${findings.filter((f) => f.kind === 'fail').length} issues found. Say "fix it" to continue.`,
-    ],
-    repair: [
-      'Master Repair Plan',
-      'One plan. Three execution paths. Choose how you want to fix everything.',
-    ],
-    speaking: [
-      'Speaking',
-      'Soren is explaining the next step.',
-    ],
-  };
-
-  const [readoutTitle, readoutBody] = readout[brainMode];
+    ? (auditResult as AuditWithPlatform).platform ?? 'Website'
+    : 'Website';
 
   const deliveryAudit = auditResult
     ? {
@@ -346,730 +363,355 @@ export default function SorenApp() {
       }
     : null;
 
+  const failingCount = auditResult?.checks?.filter((c) => !c.passed).length ?? 0;
+  const showHero = !pendingUrl && !auditResult;
+  const showConfirm = !!pendingUrl;
+  const showAudit = !!auditResult;
+
   return (
-    <div style={{
-      height: '100vh',
-      display: 'grid',
-      gridTemplateRows: '66px 1fr',
-      background:
-        'radial-gradient(circle at 50% 35%,rgba(77,234,255,.08),transparent 40%),#02070b',
-      overflow: 'hidden',
-      color: 'var(--text)',
-      fontFamily:
-        '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif',
-    }}
-    >
-      <header style={{
-        height: 66,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 24px',
-        borderBottom: '1px solid var(--line)',
-        background: 'rgba(0,0,0,.48)',
-        backdropFilter: 'blur(16px)',
+    <>
+      <SorenBrain mode={brainMode} findings={findings} fullscreen />
+
+      <div className="soren-app" style={{
+        position: 'relative',
+        zIndex: 2,
+        minHeight: '100vh',
+        display: 'grid',
+        gridTemplateRows: '70px 34px 1fr',
+        color: 'var(--text, #eaffff)',
       }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 34,
-            height: 34,
-            borderRadius: 14,
-            background: 'linear-gradient(135deg,var(--cyan),var(--pink))',
-            boxShadow: '0 0 28px rgba(77,234,255,.4)',
-          }}
-          />
-          <div>
-            <div style={{
-              letterSpacing: '.22em',
-              color: 'var(--cyan)',
-              fontWeight: 800,
-              fontSize: 15,
-            }}
-            >
-              SOREN
-            </div>
-            <div style={{ display: 'block', color: 'var(--muted)', fontSize: 11 }}>
-              Neural Core · GEO Discoverability
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {balance > 0 && (
-            <div style={{
-              border: '1px solid var(--line)',
-              borderRadius: 999,
-              padding: '6px 12px',
-              color: 'var(--cyan)',
-              background: 'rgba(255,255,255,.04)',
-              fontSize: 11,
-            }}
-            >
-              {balance}
-              {' '}
-              credits
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={toggleMute}
-            style={{
-              border: '1px solid var(--line)',
-              borderRadius: 999,
-              padding: '6px 12px',
-              color: isMuted ? 'var(--red)' : 'var(--green)',
-              background: 'rgba(255,255,255,.04)',
-              fontSize: 11,
-              cursor: 'pointer',
-            }}
-          >
-            {isMuted ? '🔇 Muted' : '🔊 Sound'}
-          </button>
-          <div style={{
-            border: '1px solid var(--line)',
-            borderRadius: 999,
-            padding: '8px 12px',
-            color: 'var(--green)',
-            background: 'rgba(255,255,255,.04)',
-            fontSize: 12,
-            fontWeight: 600,
-          }}
-          >
-            {brainMode.toUpperCase()}
-          </div>
-        </div>
-      </header>
-
-      <main
-        className="soren-neural-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '330px 1fr 370px',
-          gap: 18,
-          padding: 18,
-          minHeight: 0,
-          overflow: 'hidden',
-        }}
-      >
-        <aside style={{
-          border: '1px solid var(--line)',
-          borderRadius: 26,
-          background: 'var(--panel)',
-          backdropFilter: 'blur(16px)',
-          padding: 20,
+        <header style={{
+          borderBottom: '1px solid var(--line)',
           display: 'flex',
-          flexDirection: 'column',
+          alignItems: 'center',
           justifyContent: 'space-between',
-          overflow: 'hidden',
+          padding: '0 24px',
+          background: 'rgba(0,0,0,.50)',
+          backdropFilter: 'blur(14px)',
         }}
         >
-          <div>
-            <h1 style={{ fontSize: 28, lineHeight: 1.05, margin: '0 0 10px' }}>
-              {brainMode === 'idle' && 'Is your site visible to AI?'}
-              {brainMode === 'listening' && 'Listening...'}
-              {brainMode === 'thinking' && 'Thinking...'}
-              {brainMode === 'scanning' && 'Scanning site'}
-              {brainMode === 'results' && 'Analysis complete'}
-              {brainMode === 'repair' && 'Repair plan ready'}
-              {brainMode === 'speaking' && 'Soren speaking'}
-            </h1>
-            <p style={{
-              color: 'var(--muted)',
-              lineHeight: 1.5,
-              fontSize: 13,
-              marginBottom: 20,
-            }}
-            >
-              {readoutBody}
-            </p>
-
-            <button
-              type="button"
-              onClick={handleMicClick}
-              style={{
-                width: '100%',
-                borderRadius: 16,
-                padding: 14,
-                marginBottom: 8,
-                fontWeight: 800,
-                cursor: 'pointer',
-                letterSpacing: '.04em',
-                textTransform: 'uppercase',
-                fontSize: 13,
-                background: stt.state === 'listening'
-                  ? 'rgba(255,96,112,.15)'
-                  : 'linear-gradient(135deg,var(--cyan),#91f9ff)',
-                color: stt.state === 'listening' ? 'var(--red)' : '#041014',
-                border: stt.state === 'listening'
-                  ? '1px solid rgba(255,96,112,.5)'
-                  : '0',
-              }}
-            >
-              {stt.state === 'listening' ? '⬛ Stop' : '🎙 Speak'}
-            </button>
-            {stt.state === 'listening' && (
-              <p style={{
-                fontSize: 12,
-                color: 'var(--cyan)',
-                textAlign: 'center',
-                margin: '6px 0 0',
-              }}
-              >
-                Speak now — I&apos;m listening
-              </p>
-            )}
-            {brainMode === 'scanning' && (
-              <p style={{
-                fontSize: 12,
-                color: 'var(--muted)',
-                textAlign: 'center',
-                margin: '6px 0 0',
-              }}
-              >
-                Scanning...
-              </p>
-            )}
-
-            {auditResult && !showFix && (
-              <button
-                type="button"
-                onClick={handleFixIt}
-                style={{
-                  width: '100%',
-                  border: '1px solid rgba(99,255,163,.5)',
-                  borderRadius: 16,
-                  padding: 14,
-                  marginBottom: 8,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  letterSpacing: '.04em',
-                  textTransform: 'uppercase',
-                  fontSize: 13,
-                  background: 'rgba(99,255,163,.11)',
-                  color: 'var(--green)',
-                }}
-              >
-                ✦ Build Repair Plan
-              </button>
-            )}
-          </div>
-
           <div style={{
-            borderTop: '1px solid var(--line)',
-            paddingTop: 16,
-            marginTop: 16,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            color: 'var(--cyan)',
+            fontWeight: 900,
+            letterSpacing: '.34em',
+            fontSize: 13,
           }}
           >
-            <label style={{
-              fontSize: 11,
-              letterSpacing: '.13em',
-              textTransform: 'uppercase',
-              color: 'var(--muted)',
+            <span style={{
+              width: 12,
+              height: 12,
+              border: '2px solid var(--cyan)',
+              borderRadius: '50%',
+              boxShadow: '0 0 18px var(--cyan)',
             }}
+            />
+            SOREN · FIXES · IT
+            <span style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '.14em' }}>
+              procedural brain · full flow
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {balance > 0 && (
+              <span className="soren-pill" style={{ color: 'var(--cyan)' }}>
+                {balance}
+                {' '}
+                credits
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={toggleMute}
+              className="soren-pill"
+              style={{ cursor: 'pointer', color: isMuted ? 'var(--red)' : 'var(--green)' }}
             >
-              Website to scan
-            </label>
-            <div style={{
+              {isMuted ? '🔇 Muted' : '🔊 Sound'}
+            </button>
+            <span className="soren-pill soren-pill-live">
+              ●
+              {' '}
+              {brainMode.toUpperCase()}
+            </span>
+          </div>
+        </header>
+
+        <div className="soren-ticker">
+          <span><b />VOICE WEBSITE CONFIRMATION</span>
+          <span><b />5 SECOND EDIT WINDOW</span>
+          <span><b />GEO AUDIT</span>
+          <span><b />ADA BASIC SCAN</span>
+          <span><b />SECURITY SIGNALS</span>
+          <span><b />SOREN GUARDIAN</span>
+        </div>
+
+        <div className="soren-layout" style={{
+          display: 'grid',
+          gridTemplateColumns: '410px 1fr',
+          minHeight: 'calc(100vh - 104px)',
+        }}
+        >
+          <aside className="soren-left" style={{
+            borderRight: '1px solid var(--line)',
+            display: 'grid',
+            gridTemplateRows: '1fr auto',
+            padding: 24,
+            background: 'rgba(0,0,0,.22)',
+          }}
+          >
+            <div className="soren-hero" style={{
               display: 'grid',
-              gridTemplateColumns: '1fr 72px',
-              gap: 8,
-              marginTop: 8,
+              placeItems: 'center',
+              textAlign: 'center',
+              minHeight: 420,
             }}
             >
+              <div>
+                <h2 style={{
+                  fontSize: 34,
+                  letterSpacing: '.36em',
+                  color: 'var(--cyan)',
+                  fontWeight: 900,
+                  margin: '0 0 8px',
+                }}
+                >
+                  SOREN
+                </h2>
+                <div style={{
+                  color: 'var(--muted)',
+                  fontSize: 11,
+                  letterSpacing: '.24em',
+                  textTransform: 'uppercase',
+                  lineHeight: 1.7,
+                }}
+                >
+                  procedural intelligence brain
+                  <br />
+                  GEO · ADA · Security · Monitor
+                </div>
+                <div className="soren-wave-bar" />
+              </div>
+            </div>
+
+            <div style={{ paddingTop: 10 }}>
               <input
+                className="soren-url-input"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && draft.trim()) {
-                    void runTypedScan(draft.trim());
-                  }
+                  if (e.key === 'Enter') submitTypedUrl();
                 }}
                 placeholder="varshyl.com"
-                style={{
-                  minWidth: 0,
-                  background: '#08161d',
-                  border: '1px solid var(--line)',
-                  borderRadius: 15,
-                  color: 'var(--text)',
-                  padding: 13,
-                  fontSize: 13,
-                }}
               />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 58px', gap: 10, marginTop: 10 }}>
+                <button type="button" className="soren-btn soren-btn-primary" onClick={handleMicClick}>
+                  {stt.state === 'listening' ? '⬛ Stop' : '🎙 Speak Website'}
+                </button>
+                <button
+                  type="button"
+                  className="soren-btn soren-btn-ghost"
+                  onClick={() => {
+                    speakOnce(INTRO);
+                    appendLog(INTRO);
+                  }}
+                >
+                  🎙
+                </button>
+              </div>
               <button
                 type="button"
-                onClick={async () => {
-                  const raw = draft.trim();
-                  if (!raw) return;
-                  const url = raw.startsWith('http')
-                    ? raw : `https://${raw}`;
-                  setDraft('');
-                  clearFixPackage();
-                  setShowFix(false);
-                  setPendingUrl(null);
-                  setBrainMode('scanning');
-                  setToast(`Scanning ${url}...`);
-                  try {
-                    await runAuditFromChat(url);
-                  } catch (e) {
-                    console.error('[SCAN]', e);
-                    setToast('Scan failed. Try again.');
-                    setBrainMode('idle');
-                  }
-                }}
-                style={{
-                  border: 0,
-                  borderRadius: 15,
-                  padding: 13,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  background: 'linear-gradient(135deg,var(--cyan),#91f9ff)',
-                  color: '#041014',
-                }}
+                className="soren-btn soren-btn-primary"
+                style={{ width: '100%', marginTop: 10 }}
+                onClick={submitTypedUrl}
               >
-                Scan
+                Check Website
               </button>
-            </div>
-            {!audioUnlocked && (
-              <p style={{
-                fontSize: 11,
-                color: 'var(--muted)',
-                textAlign: 'center',
-                marginTop: 8,
-              }}
-              >
-                Click anywhere to enable voice
+              <p className="soren-hint">
+                After voice or typed entry, Soren shows the site for 5 seconds so you can edit spelling.
               </p>
-            )}
-          </div>
-        </aside>
-
-        <section
-          className="soren-neural-core"
-          style={{
-            border: '1px solid var(--line)',
-            borderRadius: 26,
-            background:
-              'radial-gradient(circle at center,rgba(77,234,255,.08),rgba(0,0,0,.04) 38%,rgba(0,0,0,.42))',
-            position: 'relative',
-            overflow: 'hidden',
-            display: 'grid',
-            placeItems: 'center',
-          }}
-        >
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage:
-              'linear-gradient(rgba(77,234,255,.035) 1px,transparent 1px),' +
-              'linear-gradient(90deg,rgba(77,234,255,.035) 1px,transparent 1px)',
-            backgroundSize: '44px 44px',
-            zIndex: 0,
-          }}
-          />
-
-          <SorenBrain mode={brainMode} findings={findings} />
-
-          {pendingUrl && (
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%,-50%)',
-              background: 'rgba(5,16,22,.95)',
-              border: '1px solid var(--cyan)',
-              borderRadius: 20,
-              padding: '24px 28px',
-              zIndex: 10,
-              minWidth: 320,
-              boxShadow: '0 0 40px rgba(77,234,255,.2)',
-              animation: 'soren-card-in .25s ease',
-            }}
-            >
-              <div style={{
-                fontSize: 10,
-                letterSpacing: 1.5,
-                color: 'var(--muted)',
-                marginBottom: 10,
-              }}
-              >
-                ◉ SOREN HEARD
-              </div>
-              <input
-                autoFocus
-                defaultValue={pendingUrl}
-                onChange={(e) => {
-                  if (timerRef.current) clearTimeout(timerRef.current);
-                  const v = e.target.value;
-                  timerRef.current = setTimeout(() => handleUrlConfirm(v), 2000);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    if (timerRef.current) clearTimeout(timerRef.current);
-                    handleUrlConfirm((e.target as HTMLInputElement).value);
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  background: '#08161d',
-                  border: '1px solid var(--cyan)',
-                  borderRadius: 12,
-                  color: 'var(--cyan)',
-                  padding: '10px 14px',
-                  fontSize: 15,
-                  fontWeight: 700,
-                  marginBottom: 12,
-                  outline: 'none',
-                }}
-              />
-              <div style={{ marginBottom: 12 }}>
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  fontSize: 10,
-                  color: 'var(--muted)',
-                  marginBottom: 5,
-                }}
-                >
-                  <span>AUTO-SCANNING IN</span>
-                  <span style={{ color: 'var(--cyan)' }}>3s</span>
-                </div>
-                <div style={{
-                  height: 2,
-                  background: 'rgba(77,234,255,.12)',
-                  borderRadius: 1,
-                  overflow: 'hidden',
-                }}
-                >
-                  <div style={{
-                    height: '100%',
-                    background: 'var(--cyan)',
-                    animation: 'soren-countdown 3s linear forwards',
-                  }}
-                  />
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => handleUrlConfirm(pendingUrl)}
-                  style={{
-                    flex: 1,
-                    padding: '9px 0',
-                    borderRadius: 10,
-                    border: '1px solid rgba(77,234,255,.4)',
-                    background: 'rgba(77,234,255,.12)',
-                    color: 'var(--cyan)',
-                    fontWeight: 700,
-                    fontSize: 12,
-                    cursor: 'pointer',
-                  }}
-                >
-                  ✓ SCAN NOW
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (timerRef.current) clearTimeout(timerRef.current);
-                    setPendingUrl(null);
-                    setBrainMode('idle');
-                  }}
-                  style={{
-                    padding: '9px 16px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(255,255,255,.1)',
-                    background: 'transparent',
-                    color: 'var(--muted)',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
             </div>
-          )}
+          </aside>
 
-          <div style={{
-            position: 'absolute',
-            left: 24,
-            right: 24,
-            bottom: 24,
-            textAlign: 'center',
-            zIndex: 2,
-            pointerEvents: 'none',
-            background: 'linear-gradient(transparent,rgba(2,7,11,.86) 30%)',
-            paddingTop: 90,
-          }}
-          >
-            <h2 style={{ fontSize: 36, margin: '0 0 8px' }}>
-              {brainMode === 'idle' && 'Soren Neural Core'}
-              {brainMode === 'listening' && 'Listening...'}
-              {brainMode === 'thinking' && 'Thinking'}
-              {brainMode === 'scanning' && 'Scanning Website'}
-              {brainMode === 'results' && 'Findings Detected'}
-              {brainMode === 'repair' && 'Master Repair Plan'}
-              {brainMode === 'speaking' && 'Speaking'}
-            </h2>
-            <p style={{
-              color: 'var(--muted)',
-              margin: '0 auto',
-              maxWidth: 500,
-              lineHeight: 1.45,
-              fontSize: 13,
-            }}
-            >
-              {readoutBody}
-            </p>
-            <div style={{
-              width: 320,
-              height: 32,
-              margin: '16px auto 0',
-              background:
-                'repeating-linear-gradient(90deg,rgba(77,234,255,.4) 0 4px,transparent 4px 9px)',
-              WebkitMaskImage:
-                'linear-gradient(90deg,transparent,#000 15%,#000 85%,transparent)',
-              maskImage:
-                'linear-gradient(90deg,transparent,#000 15%,#000 85%,transparent)',
-              animation: 'soren-wave 1.1s ease-in-out infinite',
-              display:
-                brainMode === 'speaking' || brainMode === 'listening'
-                  ? 'block'
-                  : 'none',
-            }}
-            />
-          </div>
-        </section>
-
-        <aside style={{
-          border: '1px solid var(--line)',
-          borderRadius: 26,
-          background: 'var(--panel)',
-          backdropFilter: 'blur(16px)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-        >
-          <div style={{
-            padding: 18,
-            borderBottom: '1px solid var(--line)',
-          }}
-          >
-            <h2 style={{ color: 'var(--cyan)', margin: '0 0 8px', fontSize: 16 }}>
-              {readoutTitle}
-            </h2>
-            <p style={{
-              margin: 0,
-              color: '#dcebf2',
-              lineHeight: 1.45,
-              fontSize: 13,
-            }}
-            >
-              {toast}
-            </p>
-          </div>
-
-          {auditResult && (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: 10,
-              padding: 14,
-              borderBottom: '1px solid var(--line)',
-            }}
-            >
-              {[
-                { label: 'Score', value: `${auditResult.score}/100`, color: 'var(--cyan)' },
-                {
-                  label: 'Projected',
-                  value: auditResult.score < 90 ? '95+' : '100',
-                  color: 'var(--green)',
-                },
-                {
-                  label: 'Issues',
-                  value: `${auditResult.checks?.filter((c) => !c.passed).length ?? 0}`,
-                  color: 'var(--red)',
-                },
-                {
-                  label: 'Platform',
-                  value: auditPlatform.slice(0, 10),
-                  color: 'var(--muted)',
-                },
-              ].map((m) => (
-                <div
-                  key={m.label}
-                  style={{
-                    border: '1px solid var(--line)',
-                    borderRadius: 16,
-                    padding: 13,
-                    background: 'rgba(255,255,255,.03)',
-                  }}
-                >
-                  <b style={{ fontSize: 22, display: 'block', color: m.color }}>
-                    {m.value}
-                  </b>
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    {m.label}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{
-            padding: 14,
-            display: 'grid',
-            gap: 9,
-            overflowY: 'auto',
-            flex: 1,
-          }}
-          >
-            {!auditResult && (
-              <p style={{
-                color: 'var(--muted)',
-                fontSize: 13,
-                textAlign: 'center',
-                paddingTop: 20,
-              }}
-              >
-                Run an audit to see findings
-              </p>
-            )}
-            {auditResult?.checks?.map((c, i) => (
-              <div
-                key={c.name}
-                style={{
-                  border: `1px solid ${c.passed ? 'rgba(99,255,163,.25)' : 'rgba(255,96,112,.25)'}`,
-                  borderRadius: 16,
-                  padding: 13,
-                  background: 'rgba(255,255,255,.035)',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr auto',
-                  gap: 10,
-                  animation: `soren-fade-up .3s ease ${i * 40}ms both`,
-                }}
-              >
-                <div>
-                  <strong style={{
-                    display: 'block',
-                    fontSize: 12,
-                    color: c.passed ? 'var(--green)' : 'var(--red)',
-                  }}
-                  >
-                    {c.passed ? '✅' : '❌'}
-                    {' '}
-                    {c.name}
-                  </strong>
-                  {!c.passed && (
-                    <small style={{
-                      color: 'var(--muted)',
-                      fontSize: 11,
-                      lineHeight: 1.4,
-                    }}
+          <main style={{ padding: 22, overflow: 'auto' }}>
+            <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+              {showHero && (
+                <section className="soren-panel soren-hero-panel">
+                  <div>
+                    <div className="soren-micro">voice-first website intelligence</div>
+                    <h1>Say the website. Soren confirms it before the audit.</h1>
+                    <p>
+                      Because accents and domain names can be tricky, Soren shows what it heard
+                      for five seconds. Tap edit to pause, fix spelling, then continue.
+                    </p>
+                  </div>
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    <button type="button" className="soren-btn soren-btn-primary" onClick={handleMicClick}>
+                      Start voice flow
+                    </button>
+                    <button
+                      type="button"
+                      className="soren-btn soren-btn-ghost"
+                      onClick={() => { speakOnce(INTRO); appendLog(INTRO); }}
                     >
-                      {c.tip}
-                    </small>
+                      Hear Soren intro
+                    </button>
+                  </div>
+                </section>
+              )}
+
+              {showConfirm && (
+                <section className="soren-panel soren-confirm-panel">
+                  <div className="soren-confirm-inner">
+                    <div>
+                      <h2>Soren heard this website:</h2>
+                      <div className="soren-heard-site">{displayUrl(pendingUrl!)}</div>
+                      <p>Audit starts automatically unless you edit it.</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <div className="soren-timer">{editOpen ? '—' : confirmSeconds}</div>
+                      <button type="button" className="soren-btn soren-btn-ghost" onClick={pauseForEdit}>
+                        Edit
+                      </button>
+                      <button type="button" className="soren-btn soren-btn-primary" onClick={confirmNow}>
+                        Confirm
+                      </button>
+                    </div>
+                  </div>
+                  {editOpen && (
+                    <div className="soren-edit-box open">
+                      <input
+                        value={editDraft}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); }}
+                        autoFocus
+                      />
+                      <button type="button" className="soren-btn soren-btn-primary" onClick={saveEdit}>
+                        Save &amp; Continue
+                      </button>
+                    </div>
                   )}
-                </div>
-                <span style={{
-                  fontWeight: 900,
-                  fontSize: 13,
-                  color: c.passed ? 'var(--green)' : 'var(--red)',
-                  alignSelf: 'center',
-                }}
-                >
-                  {c.passed ? `+${c.maxPoints}` : `0/${c.maxPoints}`}
-                </span>
-              </div>
-            ))}
-          </div>
+                </section>
+              )}
 
-          {brainMode === 'repair' && auditResult && (
-            <div style={{
-              padding: 16,
-              borderTop: '1px solid var(--line)',
-              background:
-                'linear-gradient(135deg,rgba(99,255,163,.08),rgba(77,234,255,.04))',
-            }}
-            >
-              <h2 style={{ color: 'var(--green)', margin: '0 0 10px', fontSize: 14 }}>
-                Before → After
-              </h2>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto 1fr',
-                gap: 8,
-                alignItems: 'center',
-              }}
-              >
-                <div style={{
-                  border: '1px solid var(--line)',
-                  borderRadius: 16,
-                  padding: 12,
-                  textAlign: 'center',
-                }}
-                >
-                  <span style={{ display: 'block', color: 'var(--muted)', fontSize: 11 }}>
-                    Now
-                  </span>
-                  <b style={{ fontSize: 28 }}>{auditResult.score}</b>
+              {showAudit && auditResult && (
+                <section className="soren-panel">
+                  <div className="soren-result-head">
+                    <div className="soren-score-num">{auditResult.score}</div>
+                    <div>
+                      <div className="soren-micro">AI readiness audit result</div>
+                      <h2>{auditResult.url}</h2>
+                      <p>
+                        {auditResult.checks.filter((c) => c.passed).length}
+                        /
+                        {auditResult.checks.length}
+                        {' '}
+                        signals active · score
+                        {' '}
+                        {auditResult.score}
+                        /100 · click any issue to hear Soren explain it.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="soren-modules">
+                    {auditResult.checks.map((c) => (
+                      <div key={c.name} className="soren-module">
+                        <button
+                          type="button"
+                          className="soren-module-btn"
+                          onClick={() => toggleCheck(c.name, c.tip ?? '', c.passed)}
+                        >
+                          <span style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
+                            <span style={{ color: c.passed ? 'var(--green)' : 'var(--red)' }}>
+                              {c.passed ? '✓' : '✕'}
+                            </span>
+                            {c.name}
+                          </span>
+                          <span
+                            className="soren-points"
+                            style={{ color: c.passed ? 'var(--cyan)' : 'var(--red)' }}
+                          >
+                            {c.passed ? `+${c.maxPoints}` : `0/${c.maxPoints}`}
+                          </span>
+                        </button>
+                        {openCheck === c.name && (
+                          <div className="soren-detail open">
+                            <div className="soren-detail-top">
+                              <div className="soren-mini-brain">S</div>
+                              <div>
+                                <div className="soren-analysis-label">SOREN ANALYSIS</div>
+                                <h3 style={{ margin: '4px 0 8px', fontSize: 16, color: 'var(--orange)' }}>
+                                  {c.passed ? 'This signal looks good.' : `${c.name} needs attention.`}
+                                </h3>
+                                <p style={{ margin: '0 0 12px', color: '#d9fff5', lineHeight: 1.45 }}>
+                                  {c.tip ?? 'No additional notes for this check.'}
+                                </p>
+                                {!c.passed && (
+                                  <div className="soren-quote">
+                                    “I can generate the exact files and instructions to fix this.”
+                                  </div>
+                                )}
+                                <div className="soren-detail-actions">
+                                  {!c.passed && (
+                                    <button
+                                      type="button"
+                                      className="soren-btn soren-btn-primary"
+                                      onClick={handleFixIt}
+                                    >
+                                      Fix this
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="soren-btn soren-btn-ghost"
+                                    onClick={() => speakOnce(c.tip ?? c.name)}
+                                  >
+                                    Explain
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {failingCount > 0 && !showFix && (
+                    <div style={{ padding: 14, borderTop: '1px solid var(--line)' }}>
+                      <button
+                        type="button"
+                        className="soren-btn soren-btn-primary"
+                        style={{ width: '100%' }}
+                        onClick={handleFixIt}
+                      >
+                        ✦ Build Master Repair Plan
+                      </button>
+                    </div>
+                  )}
+                </section>
+              )}
+
+              <section className="soren-panel soren-conversation" style={{ marginTop: 16 }}>
+                <div className="soren-conversation-head">
+                  <span>conversation log</span>
+                  <span style={{ color: 'var(--cyan)' }}>● live</span>
                 </div>
-                <div style={{
-                  fontSize: 24,
-                  color: 'var(--green)',
-                  fontWeight: 900,
-                  textAlign: 'center',
-                }}
-                >
-                  →
+                <div>
+                  {logs.map((line, i) => (
+                    <p key={`${i}-${line.slice(0, 24)}`} className="soren-logline">
+                      <b>soren:</b>
+                      {' '}
+                      {line}
+                    </p>
+                  ))}
                 </div>
-                <div style={{
-                  border: '1px solid var(--line)',
-                  borderRadius: 16,
-                  padding: 12,
-                  textAlign: 'center',
-                }}
-                >
-                  <span style={{ display: 'block', color: 'var(--muted)', fontSize: 11 }}>
-                    After fix
-                  </span>
-                  <b style={{ fontSize: 28 }}>
-                    {Math.min(
-                      auditResult.score +
-                      auditResult.checks
-                        ?.filter((c) => !c.passed)
-                        .reduce((s, c) => s + (c.maxPoints || 0), 0),
-                      100,
-                    )}
-                  </b>
-                </div>
-              </div>
+              </section>
             </div>
-          )}
-        </aside>
-      </main>
-
-      <div style={{
-        position: 'fixed',
-        left: '50%',
-        bottom: 24,
-        transform: 'translateX(-50%)',
-        zIndex: 5,
-        width: 'min(760px,calc(100% - 40px))',
-        border: '1px solid var(--line)',
-        borderRadius: 22,
-        background: 'rgba(5,18,25,.88)',
-        backdropFilter: 'blur(18px)',
-        padding: '14px 18px',
-        color: '#dcebf2',
-        fontSize: 13,
-        pointerEvents: 'none',
-      }}
-      >
-        <b style={{ color: 'var(--cyan)' }}>Soren:</b>
-        {' '}
-        {toast}
+          </main>
+        </div>
       </div>
 
       {showFix && deliveryAudit && fixPackage && (
@@ -1084,6 +726,6 @@ export default function SorenApp() {
           speak={speakOnce}
         />
       )}
-    </div>
+    </>
   );
 }

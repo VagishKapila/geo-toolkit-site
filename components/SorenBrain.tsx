@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 
 export type BrainMode =
-  | 'idle' | 'listening' | 'thinking'
+  | 'idle' | 'listening' | 'confirming' | 'thinking'
   | 'scanning' | 'results' | 'repair' | 'speaking';
 
 interface FindingOrb {
@@ -16,9 +16,10 @@ interface FindingOrb {
 interface SorenBrainProps {
   mode: BrainMode;
   findings?: FindingOrb[];
+  fullscreen?: boolean;
 }
 
-export function SorenBrain({ mode, findings = [] }: SorenBrainProps) {
+export function SorenBrain({ mode, findings = [], fullscreen = false }: SorenBrainProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const modeRef = useRef(mode);
   const findingsRef = useRef(findings);
@@ -45,7 +46,10 @@ export function SorenBrain({ mode, findings = [] }: SorenBrainProps) {
     const c2d = ctx;
 
     function resize() {
-      const r = canvas!.parentElement!.getBoundingClientRect();
+      const parent = fullscreen ? document.documentElement : canvas!.parentElement!;
+      const r = fullscreen
+        ? { width: window.innerWidth, height: window.innerHeight }
+        : parent.getBoundingClientRect();
       DPR = Math.min(devicePixelRatio || 1, 2);
       W = r.width;
       H = r.height;
@@ -134,6 +138,7 @@ export function SorenBrain({ mode, findings = [] }: SorenBrainProps) {
       const map: Record<BrainMode, [number, number, boolean, boolean, boolean]> = {
         idle: [0.18, 0.7, false, false, false],
         listening: [0.42, 1.2, true, false, false],
+        confirming: [0.38, 1.05, true, false, false],
         thinking: [0.95, 1.7, false, false, false],
         scanning: [0.82, 1.8, true, true, false],
         results: [0.55, 1.45, false, false, true],
@@ -357,17 +362,17 @@ export function SorenBrain({ mode, findings = [] }: SorenBrainProps) {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', resize);
     };
-  }, []);
+  }, [fullscreen]);
 
   return (
     <canvas
       ref={canvasRef}
       style={{
-        position: 'absolute',
+        position: fullscreen ? 'fixed' : 'absolute',
         inset: 0,
         width: '100%',
-        height: '100%',
-        zIndex: 1,
+        height: fullscreen ? '100vh' : '100%',
+        zIndex: fullscreen ? 0 : 1,
       }}
     />
   );
