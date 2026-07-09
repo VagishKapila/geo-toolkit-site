@@ -11,23 +11,20 @@ export function useSorenVoice() {
   const mutedRef = useRef(false);
   const queueRef = useRef<string[]>([]);
   const isPlayingRef = useRef(false);
+  const idleWaitersRef = useRef<(() => void)[]>([]);
 
-  const stop = useCallback(() => {
-    queueRef.current = [];
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-      try { audio.src = ''; } catch { /* ignore */ }
-      audioRef.current = null;
+  const notifyIdle = useCallback(() => {
+    if (!isPlayingRef.current && queueRef.current.length === 0) {
+      idleWaitersRef.current.splice(0).forEach((fn) => fn());
     }
-    isPlayingRef.current = false;
-    setIsSpeaking(false);
   }, []);
 
   const processQueue = useCallback(async () => {
     if (isPlayingRef.current) return;
-    if (queueRef.current.length === 0) return;
+    if (queueRef.current.length === 0) {
+      notifyIdle();
+      return;
+    }
 
     const text = queueRef.current.shift()!;
     isPlayingRef.current = true;
@@ -74,15 +71,47 @@ export function useSorenVoice() {
     } finally {
       isPlayingRef.current = false;
       setIsSpeaking(queueRef.current.length > 0);
-      setTimeout(processQueue, 150);
+      setTimeout(() => {
+        void processQueue();
+        notifyIdle();
+      }, 150);
     }
-  }, []);
+  }, [notifyIdle]);
 
-  const speak = useCallback(async (text: string) => {
+  const stop = useCallback(() => {
+    queueRef.current = [];
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      try { audio.src = ''; } catch { /* ignore */ }
+      audioRef.current = null;
+    }
+    isPlayingRef.current = false;
+    setIsSpeaking(false);
+    notifyIdle();
+  }, [notifyIdle]);
+
+  const speak = useCallback((text: string) => {
     if (mutedRef.current) return;
     queueRef.current.push(text);
-    processQueue();
+    void processQueue();
   }, [processQueue]);
+
+  const waitForIdle = useCallback((): Promise<void> => {
+    if (!isPlayingRef.current && queueRef.current.length === 0) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      idleWaitersRef.current.push(resolve);
+    });
+  }, []);
+
+  const speakAndWait = useCallback(async (text: string): Promise<void> => {
+    if (mutedRef.current) return;
+    speak(text);
+    await waitForIdle();
+  }, [speak, waitForIdle]);
 
   const toggleMute = useCallback(() => {
     const newMuted = !mutedRef.current;
@@ -93,5 +122,5 @@ export function useSorenVoice() {
     }
   }, [stop]);
 
-  return { speak, stop, isSpeaking, isMuted, toggleMute };
+  return { speak, speakAndWait, stop, isSpeaking, isMuted, toggleMute };
 }
