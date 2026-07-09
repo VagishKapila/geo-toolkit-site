@@ -15,6 +15,7 @@ import { HudTopBar } from '@/components/geo/HudTopBar';
 import { StepRail } from '@/components/geo/StepRail';
 import { useCredits } from '@/hooks/useCredits';
 import { useGeoHudFlow } from '@/hooks/useGeoHudFlow';
+import { useWakeTrigger } from '@/hooks/useWakeTrigger';
 
 interface Props {
   session: ReturnType<typeof useSession>;
@@ -39,6 +40,7 @@ async function unlockAudioContext() {
 export default function GeoHud({ session, room }: Props) {
   const { email } = useCredits();
   const flow = useGeoHudFlow(session, room);
+  useWakeTrigger(room, flow.connected);
 
   const handleTalk = () => {
     void unlockAudioContext().then(() => session.start());
