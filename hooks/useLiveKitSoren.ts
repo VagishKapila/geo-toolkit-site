@@ -6,9 +6,7 @@ import {
   RoomEvent,
   Track,
   ConnectionState,
-  createLocalAudioTrack,
   type RemoteTrack,
-  type RemoteParticipant,
 } from 'livekit-client';
 
 const ENGINE =
@@ -24,19 +22,15 @@ export type LKState =
 
 function cleanupAudioElements() {
   document.querySelectorAll('[data-soren-audio]').forEach((el) => el.remove());
+  document.querySelectorAll('audio').forEach((el) => {
+    if (el.parentElement === document.body) el.remove();
+  });
 }
 
 async function publishWakeTrigger(room: Room) {
   await room.localParticipant.publishData(
     new TextEncoder().encode(JSON.stringify({ source: 'geo-toolkit-site' })),
     { reliable: true, topic: WAKE_TOPIC },
-  );
-}
-
-function isAgentParticipant(participant: { isAgent?: boolean; identity?: string }) {
-  return Boolean(
-    participant.isAgent
-    || participant.identity?.startsWith('agent'),
   );
 }
 
@@ -117,39 +111,45 @@ export function useLiveKitSoren(
 
       room.on(RoomEvent.TrackSubscribed, (
         track: RemoteTrack,
-        _pub,
-        participant: RemoteParticipant,
       ) => {
-        if (!isAgentParticipant(participant)) return;
         if (track.kind !== Track.Kind.Audio) return;
-
         set('speaking');
 
-        const audioEl = track.attach() as HTMLAudioElement;
-        audioEl.autoplay = true;
-        audioEl.volume = 1;
-        audioEl.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;';
-        audioEl.setAttribute('data-soren-audio', 'attached');
+        // USE track.attach() — LiveKit's method
+        // handles autoplay policy correctly
+        const audioEl = track.attach();
+        audioEl.style.cssText =
+          'position:fixed;width:1px;height:1px;' +
+          'opacity:0;pointer-events:none;';
         document.body.appendChild(audioEl);
-        void audioEl.play().catch(() => {});
 
-        track.on('ended', () => {
+        // Unlock audio context
+        room.startAudio().catch(console.warn);
+
+        audioEl.play().catch(() => {
+          // If still blocked, wait for next user tap
+          const unlock = () => {
+            audioEl.play().catch(console.error);
+            document.removeEventListener('click', unlock);
+          };
+          document.addEventListener('click', unlock,
+            { once: true });
+        });
+
+        // Cleanup when track ends
+        track.on('muted' as any, () => {
           audioEl.remove();
-          if (roomRef.current) {
-            set('listening');
-            void publishWakeTrigger(roomRef.current).catch(() => {});
-          }
+          if (roomRef.current) set('listening');
         });
       });
 
       room.on(RoomEvent.TrackUnsubscribed, (
         track: RemoteTrack,
-        _pub,
-        participant: RemoteParticipant,
       ) => {
-        if (!isAgentParticipant(participant)) return;
-        if (track.kind === Track.Kind.Audio) track.detach();
-        if (roomRef.current) set('listening');
+        if (track.kind === Track.Kind.Audio) {
+          track.detach();
+          set('listening');
+        }
       });
 
       room.on(RoomEvent.ConnectionStateChanged, (s: ConnectionState) => {
@@ -169,25 +169,13 @@ export function useLiveKitSoren(
         }
       });
 
-      await room.connect(liveKitUrl, token, { autoSubscribe: true });
+      await room.connect(liveKitUrl, token);
+      await room.localParticipant.setMicrophoneEnabled(true);
 
-      try {
-        const micTrack = await createLocalAudioTrack({
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        });
-        await room.localParticipant.publishTrack(micTrack);
-      } catch (micErr) {
-        console.warn('[LK] createLocalAudioTrack failed, falling back:', micErr);
-        await room.localParticipant.setMicrophoneEnabled(true);
-      }
-
-      try {
-        await room.startAudio();
-      } catch (e) {
-        console.warn('[LK] startAudio:', e);
-      }
+      // Unlock audio — must be called from
+      // user gesture context (connect() is
+      // triggered by button click so this is safe)
+      room.startAudio().catch(console.warn);
 
       startWakeKeepalive(room);
       set('listening');
