@@ -8,10 +8,11 @@ import {
   RoomEvent,
   type RemoteParticipant,
 } from 'livekit-client';
+import { isIntroDone, onIntroDone, resetIntroSession } from './intro-session';
 
 /** Matches varshyl-voice agent-entry.ts WAKE_TOPIC + test.html publishData. */
 const WAKE_TOPIC = 'wake-trigger';
-const AGENT_JOIN_DELAY_MS = 500;
+const WAKE_DELAY_MS = 300;
 const PUBLISH_ON_BEHALF_ATTR = 'lk.publish_on_behalf';
 
 function publishWakeTrigger(room: Room) {
@@ -31,47 +32,66 @@ function isPrimaryAgent(participant: RemoteParticipant): boolean {
   );
 }
 
-/** Publish wake-trigger once the agent participant is present (not on room connect). */
+/**
+ * Publish wake-trigger once agent has joined AND intro mp3s finished,
+ * then +300ms. Once per agent; rearm on disconnect.
+ */
 export function useWakeTrigger(room: Room) {
   const { agent } = useVoiceAssistant();
   const sentForAgentRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const agentIdentityRef = useRef<string | null>(null);
 
-  const scheduleForAgent = useCallback(
+  const disarm = useCallback(() => {
+    sentForAgentRef.current = null;
+    agentIdentityRef.current = null;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    resetIntroSession();
+  }, []);
+
+  const tryScheduleWake = useCallback(() => {
+    const agentIdentity = agentIdentityRef.current;
+    if (!agentIdentity || !isIntroDone()) return;
+    if (sentForAgentRef.current === agentIdentity) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      sentForAgentRef.current = agentIdentity;
+      void publishWakeTrigger(room)
+        .then(() => console.log('[wake] trigger sent to agent'))
+        .catch(() => {
+          sentForAgentRef.current = null;
+        });
+    }, WAKE_DELAY_MS);
+  }, [room]);
+
+  const noteAgent = useCallback(
     (agentIdentity: string) => {
-      if (sentForAgentRef.current === agentIdentity) return;
-      if (timerRef.current) clearTimeout(timerRef.current);
-
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-        sentForAgentRef.current = agentIdentity;
-        void publishWakeTrigger(room)
-          .then(() => console.log('[wake] trigger sent to agent'))
-          .catch(() => {
-            sentForAgentRef.current = null;
-          });
-      }, AGENT_JOIN_DELAY_MS);
+      agentIdentityRef.current = agentIdentity;
+      tryScheduleWake();
     },
-    [room],
+    [tryScheduleWake],
   );
 
   useEffect(() => {
     if (!agent) return;
-    scheduleForAgent(agent.identity);
-  }, [agent, scheduleForAgent]);
+    noteAgent(agent.identity);
+  }, [agent, noteAgent]);
 
   useEffect(() => {
-    const disarm = () => {
-      sentForAgentRef.current = null;
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-    };
+    return onIntroDone(() => {
+      tryScheduleWake();
+    });
+  }, [tryScheduleWake]);
 
+  useEffect(() => {
     const onParticipantConnected = (participant: RemoteParticipant) => {
       if (!isPrimaryAgent(participant)) return;
-      scheduleForAgent(participant.identity);
+      noteAgent(participant.identity);
     };
 
     room.on(RoomEvent.Disconnected, disarm);
@@ -81,5 +101,5 @@ export function useWakeTrigger(room: Room) {
       room.off(RoomEvent.ParticipantConnected, onParticipantConnected);
       disarm();
     };
-  }, [room, scheduleForAgent]);
+  }, [room, disarm, noteAgent]);
 }

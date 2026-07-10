@@ -26,7 +26,7 @@ import {
 import { AgentSessionProvider } from './agent-session-provider';
 import { StartAudioButton } from './start-audio-button';
 import { NameModal } from './name-modal';
-import { fireActivationAudio } from './activation-audio';
+import { playActivationAudio } from './activation-audio';
 import { mapAgentState, STATE_BADGE } from './agent-state';
 import {
   clearSessionTokenCache,
@@ -39,6 +39,7 @@ import {
   tryAcquireConnect,
   voiceSessionLog,
 } from './session-lifecycle';
+import { markIntroDone, resetIntroSession } from './intro-session';
 import { useWakeTrigger } from './use-wake-trigger';
 import { USER_NAME_KEY } from './constants';
 
@@ -116,14 +117,39 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
   const pendingConnectRef = useRef(false);
   const connectAttemptRef = useRef(false);
   const agentJoinedRef = useRef(false);
+  const introPromiseRef = useRef<Promise<void>>(Promise.resolve());
+  const introCompleteRef = useRef(false);
+  const roomConnectedRef = useRef(false);
+  const micLiveRef = useRef(false);
 
   const room = getSharedRoom();
   const tokenSource = getSharedTokenSource();
   const session = useSession(tokenSource, { room });
 
+  const maybeFinishIntro = useCallback(async () => {
+    if (micLiveRef.current || !introCompleteRef.current || !roomConnectedRef.current) {
+      return;
+    }
+    if (room.state !== ConnectionState.Connected) return;
+    micLiveRef.current = true;
+    await room.localParticipant.setMicrophoneEnabled(true);
+    console.log('[voice] intro done, mic live');
+    markIntroDone();
+  }, [room]);
+
+  const resetIntroMicState = useCallback(() => {
+    introCompleteRef.current = false;
+    roomConnectedRef.current = false;
+    micLiveRef.current = false;
+    resetIntroSession();
+  }, []);
+
   useEffect(() => {
     const onConnected = () => {
       console.log('[voice] connected');
+      roomConnectedRef.current = true;
+      void room.localParticipant.setMicrophoneEnabled(false);
+      void maybeFinishIntro();
     };
     const onParticipant = (p: RemoteParticipant) => {
       if (p.isAgent && !agentJoinedRef.current) {
@@ -131,13 +157,18 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
         console.log('[voice] agent joined');
       }
     };
+    const onDisconnected = () => {
+      resetIntroMicState();
+    };
     room.on(RoomEvent.Connected, onConnected);
     room.on(RoomEvent.ParticipantConnected, onParticipant);
+    room.on(RoomEvent.Disconnected, onDisconnected);
     return () => {
       room.off(RoomEvent.Connected, onConnected);
       room.off(RoomEvent.ParticipantConnected, onParticipant);
+      room.off(RoomEvent.Disconnected, onDisconnected);
     };
-  }, [room]);
+  }, [room, maybeFinishIntro, resetIntroMicState]);
 
   useEffect(() => {
     const onUnload = () => {
@@ -158,6 +189,7 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
     }
     connectAttemptRef.current = true;
     agentJoinedRef.current = false;
+    resetIntroMicState();
     try {
       if (room.state !== ConnectionState.Disconnected) {
         await room.disconnect();
@@ -173,7 +205,7 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
       connectAttemptRef.current = false;
       releaseConnect();
     }
-  }, [room, session]);
+  }, [room, session, resetIntroMicState]);
 
   const activate = useCallback(() => {
     if (isRoomSessionLive(room) || connectAttemptRef.current) {
@@ -181,7 +213,11 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
       return;
     }
     markSessionRequested();
-    fireActivationAudio();
+    introPromiseRef.current = playActivationAudio();
+    void introPromiseRef.current.then(() => {
+      introCompleteRef.current = true;
+      void maybeFinishIntro();
+    });
     const storedName = localStorage.getItem(USER_NAME_KEY);
     if (!storedName) {
       pendingConnectRef.current = true;
@@ -189,7 +225,7 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
       return;
     }
     void connect();
-  }, [connect, room]);
+  }, [connect, room, maybeFinishIntro]);
 
   const handleNameSubmit = useCallback(
     (name: string) => {

@@ -113,6 +113,10 @@ export async function playGreeting(opts: GreetingOptions = {}): Promise<void> {
   try {
     await audio.play();
     console.log('[greeting] play() succeeded');
+    await new Promise<void>((resolve) => {
+      audio.addEventListener('ended', () => resolve(), { once: true });
+      audio.addEventListener('error', () => resolve(), { once: true });
+    });
   } catch (err) {
     console.error('[greeting] play() failed:', err);
   }

@@ -4,14 +4,13 @@
  *
  * Always plays /sounds/wake-sting-01.mp3 via Web Audio API (AudioContext).
  * HTMLAudioElement.canplaythrough is unreliable for short clips in Chrome.
- * Resolves after GREETING_DELAY_MS so caller can chain the greeting.
+ * Resolves when sting playback fully ends so caller can chain the greeting.
  *
  * To add variety later: upload wake-sting-02..N.mp3 and bump STING_COUNT.
  * Must be called inside a user-gesture handler (click/keydown).
  */
 
 const STING_FILE        = '/sounds/wake-sting-01.mp3';
-const GREETING_DELAY_MS = 500;    // ms before caller fires greeting
 const FADE_DURATION_MS  = 1000;   // ms to fade background music
 
 // ── Shared AudioContext ───────────────────────────────────────────────────────
@@ -64,31 +63,32 @@ export async function playWakeSting(opts: StingOptions = {}): Promise<void> {
 
   fadeMusicOut(FADE_DURATION_MS);
 
-  if (muted) return new Promise((resolve) => setTimeout(resolve, GREETING_DELAY_MS));
+  if (muted) return;
 
   console.log(`[wake-sting] fetching ${STING_FILE} at volume ${volume}`);
 
-  // Fire fetch + decode in background — greeting delay starts immediately
-  (async () => {
-    try {
-      const ctx      = getAudioContext();
-      const resp     = await fetch(STING_FILE);
-      const buf      = await resp.arrayBuffer();
-      const decoded  = await ctx.decodeAudioData(buf);
+  return new Promise<void>((resolve) => {
+    void (async () => {
+      try {
+        const ctx = getAudioContext();
+        const resp = await fetch(STING_FILE);
+        const buf = await resp.arrayBuffer();
+        const decoded = await ctx.decodeAudioData(buf);
 
-      const source   = ctx.createBufferSource();
-      source.buffer  = decoded;
-      const gain     = ctx.createGain();
-      gain.gain.value = Math.max(0, Math.min(1, volume));
-      source.connect(gain);
-      gain.connect(ctx.destination);
-      source.start(0);
+        const source = ctx.createBufferSource();
+        source.buffer = decoded;
+        const gain = ctx.createGain();
+        gain.gain.value = Math.max(0, Math.min(1, volume));
+        source.connect(gain);
+        gain.connect(ctx.destination);
+        source.onended = () => resolve();
+        source.start(0);
 
-      console.log(`[wake-sting] playing ${STING_FILE} — ${decoded.duration.toFixed(3)}s via AudioContext`);
-    } catch (err) {
-      console.error('[wake-sting] playback failed:', err);
-    }
-  })();
-
-  return new Promise((resolve) => setTimeout(resolve, GREETING_DELAY_MS));
+        console.log(`[wake-sting] playing ${STING_FILE} — ${decoded.duration.toFixed(3)}s via AudioContext`);
+      } catch (err) {
+        console.error('[wake-sting] playback failed:', err);
+        resolve();
+      }
+    })();
+  });
 }

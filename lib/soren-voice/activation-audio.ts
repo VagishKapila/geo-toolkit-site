@@ -11,8 +11,14 @@ function getAudioPrefs(): { muted: boolean; volume: number } {
   }
 }
 
-/** HUD welcome-view activation audio chain — verbatim. */
-export function fireActivationAudio(): void {
+/** Plays sting then greeting; resolves when both playback fully ended. */
+export async function playActivationAudio(): Promise<void> {
   const { muted, volume } = getAudioPrefs();
-  void playWakeSting({ muted, volume }).then(() => playGreeting({ muted, volume }));
+  await playWakeSting({ muted, volume });
+  await playGreeting({ muted, volume });
+}
+
+/** @deprecated use playActivationAudio */
+export function fireActivationAudio(): void {
+  void playActivationAudio();
 }
