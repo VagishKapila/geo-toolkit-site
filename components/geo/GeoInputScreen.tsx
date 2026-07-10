@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import { Mic } from 'lucide-react';
 
 interface Props {
   url: string;
@@ -20,64 +21,47 @@ export function GeoInputScreen({
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <section className="screen active hero">
-      <h2>Talk to Soren or type your website.</h2>
+    <section className="screen active hero heroTextFirst">
+      <h2>Check your website</h2>
       <p>
-        Soren welcomes every visitor and is ready to listen. Say the website
-        naturally, or type it below. Soren then shows what it heard for eight
-        seconds so the spelling can be corrected before the scan begins.
+        Enter any live URL for a free GEO readiness scan. You&apos;ll confirm
+        spelling for eight seconds before the scan begins.
       </p>
 
-      <div className="voiceEntryCard">
-        <div className="voiceEntryCopy">
-          <span className="voiceEyebrow">Voice-first experience</span>
-          <h3>
-            &ldquo;Hi, I&rsquo;m Soren. Tell me the website you&rsquo;d like me
-            to check.&rdquo;
-          </h3>
-          <p>
-            No typing is required. Speak the domain, and Soren will show what it
-            heard with an 8-second edit window before starting the scan.
-          </p>
-        </div>
-        <button
-          type="button"
-          aria-label="Start talking to Soren"
-          className="voiceStartBtn"
-          onClick={onStartVoice}
-        >
-          <span aria-hidden="true" className="voicePulse" />
-          <span>
-            <strong>Talk to Soren</strong>
-            <small>Click once, then speak naturally</small>
-          </span>
-        </button>
-      </div>
-
-      <div className="entryDivider">
-        <span>or type the website</span>
-      </div>
-
-      <div className="urlBox">
+      <div className="urlBox urlBoxHero">
         <div>
-          <label>Type Website URL</label>
+          <label htmlFor="websiteInput">Website URL</label>
           <input
             ref={inputRef}
             id="websiteInput"
             value={url}
-            placeholder="varshyl.com"
+            placeholder="example.com"
+            autoComplete="url"
             onChange={(e) => onUrlChange(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && url.trim() && onStart()}
           />
         </div>
         <button
           type="button"
-          className="btn"
+          className="btn primary startScanBtn"
           disabled={!url.trim()}
           onClick={onStart}
         >
-          Scan Typed Website
+          START
         </button>
+      </div>
+
+      <div className="voiceSecondaryRow">
+        <button
+          type="button"
+          aria-label="Talk to Soren instead of typing"
+          className="voiceSecondaryBtn"
+          onClick={onStartVoice}
+        >
+          <Mic size={16} aria-hidden="true" />
+          Talk to Soren instead
+        </button>
+        <span className="voiceSecondaryHint">Optional — speak your URL naturally</span>
       </div>
 
       <div className="startCards">

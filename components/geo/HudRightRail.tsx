@@ -9,6 +9,7 @@ interface Props {
   timerLabel: string;
   audit: GeoAudit | null;
   lines: string[];
+  showConversationLog: boolean;
 }
 
 function parseLogLine(line: string): { speaker: string; text: string } {
@@ -19,7 +20,13 @@ function parseLogLine(line: string): { speaker: string; text: string } {
   return { speaker: 'Soren', text: line };
 }
 
-export function HudRightRail({ mode, timerLabel, audit, lines }: Props) {
+export function HudRightRail({
+  mode,
+  timerLabel,
+  audit,
+  lines,
+  showConversationLog,
+}: Props) {
   const logRef = useRef<HTMLDivElement>(null);
   const issues = audit?.checks.filter((c) => !c.passed).length ?? null;
   const projected = audit ? projectedScore(audit) : null;
@@ -30,7 +37,7 @@ export function HudRightRail({ mode, timerLabel, audit, lines }: Props) {
   }, [lines]);
 
   return (
-    <aside className="right">
+    <aside className={`right${showConversationLog ? ' rightVoiceActive' : ''}`}>
       <section className="panel">
         <div className="sideTitle">System</div>
         <div className="sideBlock">
@@ -69,19 +76,21 @@ export function HudRightRail({ mode, timerLabel, audit, lines }: Props) {
           </div>
         </div>
       </section>
-      <section className="panel logPanel">
-        <div className="sideTitle">Conversation Log</div>
-        <div className="log" ref={logRef}>
-          {lines.map((line, i) => {
-            const { speaker, text } = parseLogLine(line);
-            return (
-              <p key={`${line}-${i}`}>
-                <b>{speaker}:</b> {text}
-              </p>
-            );
-          })}
-        </div>
-      </section>
+      {showConversationLog && (
+        <section className="panel logPanel">
+          <div className="sideTitle">Conversation Log</div>
+          <div className="log" ref={logRef}>
+            {lines.map((line, i) => {
+              const { speaker, text } = parseLogLine(line);
+              return (
+                <p key={`${line}-${i}`}>
+                  <b>{speaker}:</b> {text}
+                </p>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </aside>
   );
 }
