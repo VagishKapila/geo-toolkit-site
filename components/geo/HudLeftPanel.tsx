@@ -6,6 +6,7 @@ import { SorenBrain } from '@/components/SorenBrain';
 interface Props {
   brainMode: BrainMode;
   modeLine: string;
+  connected: boolean;
   onTalk: () => void;
   onTypeWebsite: () => void;
   onViewMaster: () => void;
@@ -15,6 +16,7 @@ interface Props {
 export function HudLeftPanel({
   brainMode,
   modeLine,
+  connected,
   onTalk,
   onTypeWebsite,
   onViewMaster,
@@ -43,11 +45,11 @@ export function HudLeftPanel({
       <div className="leftActions">
         <button
           type="button"
-          aria-label="Talk to Soren"
+          aria-label={connected ? 'Start a new conversation' : 'Talk to Soren'}
           className="btn primary talkSorenBtn"
           onClick={onTalk}
         >
-          Talk to Soren
+          {connected ? 'New Conversation' : 'Talk to Soren'}
         </button>
         <button
           type="button"
