@@ -11,6 +11,16 @@ interface Props {
   onStartVoice: () => void;
 }
 
+function urlErrorMessage(error: string): string {
+  if (/doesn't look like a valid website/i.test(error)) {
+    return error;
+  }
+  if (/enter a website/i.test(error)) {
+    return error;
+  }
+  return "We couldn't reach this website. Check the spelling and try again.";
+}
+
 export function GeoInputScreen({
   url,
   error,
@@ -22,49 +32,58 @@ export function GeoInputScreen({
 
   return (
     <section className="screen active hero heroTextFirst">
-      <h2>Check your website</h2>
-      <p>
-        Enter any live URL for a free GEO readiness scan. You&apos;ll confirm
-        spelling for eight seconds before the scan begins.
-      </p>
+      <h2>Check your website&apos;s AI readiness</h2>
 
-      <div className="urlBox urlBoxHero">
-        <div>
-          <label htmlFor="websiteInput">Website URL</label>
+      <div className="scanHeroForm">
+        <label htmlFor="websiteInput" className="scanHeroLabel">
+          Website URL
+        </label>
+        <div className="scanHeroRow">
           <input
             ref={inputRef}
             id="websiteInput"
+            className="scanHeroInput"
             value={url}
             placeholder="example.com"
             autoComplete="url"
             onChange={(e) => onUrlChange(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && url.trim() && onStart()}
           />
+          <button
+            type="button"
+            className="scanWebsiteBtn"
+            disabled={!url.trim()}
+            onClick={onStart}
+          >
+            Scan Website
+          </button>
         </div>
-        <button
-          type="button"
-          className="btn primary startScanBtn"
-          disabled={!url.trim()}
-          onClick={onStart}
-        >
-          START
-        </button>
+        {error && (
+          <div className="urlScanError" role="alert">
+            <span aria-hidden="true">⚠️</span>
+            <span>{urlErrorMessage(error)}</span>
+          </div>
+        )}
       </div>
 
-      <div className="voiceSecondaryRow">
+      <div className="entryDivider heroVoiceDivider">
+        <span>or</span>
+      </div>
+
+      <div className="orTalkToSoren">
+        <p className="orTalkLabel">Or talk to Soren</p>
         <button
           type="button"
-          aria-label="Talk to Soren instead of typing"
-          className="voiceSecondaryBtn"
+          aria-label="Talk to Soren — say your website URL out loud"
+          className="orTalkBtn"
           onClick={onStartVoice}
         >
-          <Mic size={16} aria-hidden="true" />
-          Talk to Soren instead
+          <Mic size={18} aria-hidden="true" />
+          <span>Say your URL out loud — Soren listens and confirms spelling</span>
         </button>
-        <span className="voiceSecondaryHint">Optional — speak your URL naturally</span>
       </div>
 
-      <div className="startCards">
+      <div className="startCards heroBelowFold">
         <div className="infoCard">
           <b>Analysis first</b>
           <p>
@@ -77,7 +96,6 @@ export function GeoInputScreen({
           <p>One Master Repair Plan packages every recommended fix together.</p>
         </div>
       </div>
-      {error && <p className="geo-hud-error">{error}</p>}
     </section>
   );
 }
