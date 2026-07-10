@@ -20,6 +20,8 @@ interface Props {
   onOpen: (check: GeoCheck) => void;
   onCloseDetail: () => void;
   onMaster: () => void;
+  onGoHome: () => void;
+  onShowAll: () => void;
 }
 
 export function ResultFindings({
@@ -32,6 +34,8 @@ export function ResultFindings({
   onOpen,
   onCloseDetail,
   onMaster,
+  onGoHome,
+  onShowAll,
 }: Props) {
   const failing = checks.filter((c) => !c.passed);
   const warnings = checks.filter((c) => !c.passed && (c.points ?? 0) > 0);
@@ -42,6 +46,19 @@ export function ResultFindings({
 
   return (
     <>
+      <div className="screenTopBar">
+        <span className="screenHint">
+          Review all findings, filter them, or close to scan another website.
+        </span>
+        <button
+          type="button"
+          aria-label="Close results and return home"
+          className="closeScreenBtn"
+          onClick={onGoHome}
+        >
+          ×
+        </button>
+      </div>
       <div className="scoreHead">
         <div className="ring" style={{ background: ringGradient }}>
           <span>{score}</span>
@@ -49,8 +66,8 @@ export function ResultFindings({
         <div className="scoreText">
           <h2>AI Readiness Score</h2>
           <p>
-            {url} has {failing.length} issues and {passing.length} passed checks.
-            Click any finding to investigate.
+            {url} has {failing.length} issues, {warnings.length} recommendations,
+            and {passing.length} passed checks. Click any finding to investigate.
           </p>
         </div>
         <div className="summary">
@@ -68,15 +85,29 @@ export function ResultFindings({
           </button>
         </div>
       </div>
+      <div className="resultUtilityRow">
+        <button type="button" className="btn soft" onClick={onShowAll}>
+          Show Full Scan
+        </button>
+        <button type="button" className="btn soft" onClick={onGoHome}>
+          Scan Another Website
+        </button>
+      </div>
       <div className="findingGrid">
         {visible.map((c) => {
           const kind = findingKind(c);
           const badge =
             c.maxPoints != null
               ? `${c.points ?? 0}/${c.maxPoints}`
-              : c.passed ? 'OK' : 'FAIL';
+              : c.passed
+                ? 'OK'
+                : 'FAIL';
           const badgeColor =
-            kind === 'pass' ? 'var(--green)' : kind === 'warn' ? 'var(--amber)' : 'var(--red)';
+            kind === 'pass'
+              ? 'var(--green)'
+              : kind === 'warn'
+                ? 'var(--amber)'
+                : 'var(--red)';
           return (
             <button
               key={c.name}
@@ -85,7 +116,9 @@ export function ResultFindings({
               data-kind={kind}
               onClick={() => onOpen(c)}
             >
-              <span className="badge" style={{ color: badgeColor }}>{badge}</span>
+              <span className="badge" style={{ color: badgeColor }}>
+                {badge}
+              </span>
               <strong>{c.name}</strong>
               {c.tip && <small>{c.tip}</small>}
             </button>
@@ -110,6 +143,22 @@ export function ResultFindings({
             </button>
           </>
         )}
+      </div>
+      <div className="fullScanFooter">
+        <div>
+          <span className="fullScanEyebrow">Full Scan Complete</span>
+          <h3>
+            {checks.length} checks reviewed across GEO, accessibility, security,
+            and monitoring.
+          </h3>
+          <p>
+            Review any item above, or build one Master Repair Plan that packages
+            all recommended fixes together.
+          </p>
+        </div>
+        <button type="button" className="btn primary fullPlanBtn" onClick={onMaster}>
+          Build Master Repair Plan
+        </button>
       </div>
     </>
   );

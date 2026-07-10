@@ -6,9 +6,8 @@ import { SorenBrain } from '@/components/SorenBrain';
 interface Props {
   brainMode: BrainMode;
   modeLine: string;
-  connected: boolean;
   onTalk: () => void;
-  onTypedStart: () => void;
+  onTypeWebsite: () => void;
   onViewMaster: () => void;
   hasResult: boolean;
 }
@@ -16,9 +15,8 @@ interface Props {
 export function HudLeftPanel({
   brainMode,
   modeLine,
-  connected,
   onTalk,
-  onTypedStart,
+  onTypeWebsite,
   onViewMaster,
   hasResult,
 }: Props) {
@@ -43,17 +41,30 @@ export function HudLeftPanel({
         </div>
       </div>
       <div className="leftActions">
-        {!connected && (
-          <button type="button" className="btn" onClick={onTalk}>
-            TALK TO SOREN
-          </button>
-        )}
-        <button type="button" className="btn secondary" onClick={onTypedStart}>
-          CHECK TYPED WEBSITE
+        <button
+          type="button"
+          aria-label="Talk to Soren"
+          className="btn primary talkSorenBtn"
+          onClick={onTalk}
+        >
+          Talk to Soren
+        </button>
+        <button
+          type="button"
+          aria-label="Type a website instead"
+          className="btn soft typeWebsiteBtn"
+          onClick={onTypeWebsite}
+        >
+          Type Website Instead
         </button>
         {hasResult && (
-          <button type="button" className="btn amber" onClick={onViewMaster}>
-            VIEW MASTER PLAN
+          <button
+            type="button"
+            aria-label="View Master Repair Plan"
+            className="btn warning"
+            onClick={onViewMaster}
+          >
+            View Master Plan
           </button>
         )}
       </div>

@@ -2,10 +2,21 @@
 
 interface Props {
   status: string;
+  muted: boolean;
+  onMuteToggle: () => void;
+  onStop: () => void;
+  onEndSession: () => void;
   onHome: () => void;
 }
 
-export function HudTopBar({ status, onHome }: Props) {
+export function HudTopBar({
+  status,
+  muted,
+  onMuteToggle,
+  onStop,
+  onEndSession,
+  onHome,
+}: Props) {
   return (
     <header className="top">
       <div className="brand">
@@ -17,8 +28,27 @@ export function HudTopBar({ status, onHome }: Props) {
       </div>
       <div className="topRight">
         <div className="status">{status}</div>
-        <button type="button" className="btn secondary" onClick={onHome}>
-          HOME
+        <button
+          type="button"
+          className="topControl mute"
+          onClick={onMuteToggle}
+        >
+          {muted ? 'Unmute' : 'Mute'}
+        </button>
+        <button type="button" className="topControl stop" onClick={onStop}>
+          Stop
+        </button>
+        <button type="button" className="topControl end" onClick={onEndSession}>
+          End Session
+        </button>
+        <button
+          type="button"
+          aria-label="Return home"
+          className="homeIcon"
+          onClick={onHome}
+          title="Home"
+        >
+          ⌂
         </button>
       </div>
     </header>
