@@ -69,7 +69,45 @@ export default function GeoHud() {
     }
   }, [flow, muted, voice.room]);
 
-  const startVoiceConversation = useCallback(() => {
+  const setMicEnabled = useCallback(
+    async (enabled: boolean) => {
+      try {
+        await voice.room.localParticipant.setMicrophoneEnabled(enabled);
+      } catch {
+        /* ignore */
+      }
+    },
+    [voice.room],
+  );
+
+  const pauseConfirmEdit = useCallback(() => {
+    interrupt();
+    flow.setEditing(true);
+    void setMicEnabled(false);
+    flow.append('Timer paused. Edit spelling or resume countdown.');
+  }, [flow, interrupt, setMicEnabled]);
+
+  const resumeConfirmEdit = useCallback(() => {
+    flow.setEditing(false);
+    flow.setCountdown(8);
+    if (!muted) void setMicEnabled(true);
+    flow.append('Countdown resumed.');
+  }, [flow, muted, setMicEnabled]);
+
+  const saveConfirmAndScan = useCallback(() => {
+    interrupt();
+    if (!muted) void setMicEnabled(true);
+    flow.setEditing(false);
+    void flow.beginScan(flow.heardUrl);
+  }, [flow, interrupt, muted, setMicEnabled]);
+
+  const startVoiceConversation = useCallback(async () => {
+    if (voice.isConnected) {
+      await flow.prepareNewConversation();
+      voice.activate();
+      flow.append('Starting a fresh conversation.');
+      return;
+    }
     voice.activate();
     flow.append("I'm listening. Please say the website you want me to check.");
   }, [flow, voice]);
@@ -102,7 +140,8 @@ export default function GeoHud() {
         <HudLeftPanel
           brainMode={brainMode}
           modeLine={modeLine}
-          onTalk={startVoiceConversation}
+          connected={voice.isConnected}
+          onTalk={() => void startVoiceConversation()}
           onTypeWebsite={() => {
             flow.goToInput();
             setTimeout(focusWebsiteInput, 60);
@@ -124,7 +163,7 @@ export default function GeoHud() {
                 error={flow.error}
                 onUrlChange={flow.setUrl}
                 onStart={() => flow.startConfirm(flow.url)}
-                onStartVoice={startVoiceConversation}
+                onStartVoice={() => void startVoiceConversation()}
               />
             )}
             {flow.phase === 'confirm' && (
@@ -132,18 +171,11 @@ export default function GeoHud() {
                 heardUrl={flow.heardUrl}
                 countdown={flow.countdown}
                 editing={flow.editing}
-                onEdit={() => {
-                  flow.setEditing(true);
-                  flow.append('Timer paused. Edit spelling or resume countdown.');
-                }}
+                onEdit={pauseConfirmEdit}
                 onConfirmNow={() => void flow.beginScan(flow.heardUrl)}
                 onHeardChange={flow.setHeardUrl}
-                onSaveScan={() => void flow.beginScan(flow.heardUrl)}
-                onResume={() => {
-                  flow.setEditing(false);
-                  flow.setCountdown(8);
-                  flow.append('Countdown resumed.');
-                }}
+                onSaveScan={saveConfirmAndScan}
+                onResume={resumeConfirmEdit}
               />
             )}
             {flow.phase === 'scanning' && (

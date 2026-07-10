@@ -36,6 +36,22 @@ export function useGeoHudFlow(room: Room) {
   const [showPartner, setShowPartner] = useState(false);
   const processedVoiceRef = useRef<Set<string>>(new Set());
 
+  const clearFlowState = useCallback(() => {
+    processedVoiceRef.current.clear();
+    setPhase('input');
+    setRailStep('input');
+    setUrl('');
+    setHeardUrl('');
+    setCountdown(8);
+    setEditing(false);
+    setAudit(null);
+    setError(null);
+    setVoiceRequestedFix(false);
+    setShowMaster(false);
+    setShowPartner(false);
+    clear();
+  }, [clear]);
+
   const beginScan = useCallback(async (target: string) => {
     setPhase('scanning');
     setRailStep('scan');
@@ -81,6 +97,7 @@ export function useGeoHudFlow(room: Room) {
   }, [phase, editing, countdown, heardUrl, beginScan]);
 
   useEffect(() => {
+    // Voice URL detection only on the input screen — never during confirm/edit.
     if (phase !== 'input') return;
     for (const line of lines) {
       if (!line.startsWith('You: ')) continue;
@@ -114,26 +131,23 @@ export function useGeoHudFlow(room: Room) {
   useSorenEvents(room, onSorenEvent);
 
   const resetAll = useCallback(async () => {
-    processedVoiceRef.current.clear();
-    setPhase('input');
-    setRailStep('input');
-    setUrl('');
-    setHeardUrl('');
-    setCountdown(8);
-    setEditing(false);
-    setAudit(null);
-    setError(null);
-    setVoiceRequestedFix(false);
-    setShowMaster(false);
-    setShowPartner(false);
-    clear();
+    clearFlowState();
     try {
       await teardownSession(room);
     } catch {
       /* ignore disconnect errors */
     }
     append('Reset complete. Ready for website input.');
-  }, [append, clear, room]);
+  }, [append, clearFlowState, room]);
+
+  const prepareNewConversation = useCallback(async () => {
+    clearFlowState();
+    try {
+      await teardownSession(room);
+    } catch {
+      /* ignore disconnect errors */
+    }
+  }, [clearFlowState, room]);
 
   const endSession = useCallback(async () => {
     try {
@@ -185,6 +199,7 @@ export function useGeoHudFlow(room: Room) {
     beginScan,
     startConfirm,
     resetAll,
+    prepareNewConversation,
     endSession,
     goToInput,
     backToResults,
