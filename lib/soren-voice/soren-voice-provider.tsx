@@ -40,7 +40,6 @@ import {
   voiceSessionLog,
 } from './session-lifecycle';
 import { markIntroDone, resetIntroSession } from './intro-session';
-import { useWakeTrigger } from './use-wake-trigger';
 import { USER_NAME_KEY } from './constants';
 
 export interface SorenVoiceContextValue {
@@ -83,7 +82,6 @@ function SorenVoiceBridge({
 }) {
   const { isConnected } = useSessionContext();
   const { state: rawAgentState } = useVoiceAssistant();
-  useWakeTrigger(room);
 
   const agentState = mapAgentState(rawAgentState as string | undefined);
   const agentBadge = STATE_BADGE[agentState] ?? '○ STANDBY';
