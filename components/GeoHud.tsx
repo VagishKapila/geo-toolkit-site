@@ -16,10 +16,10 @@ import { StepRail } from '@/components/geo/StepRail';
 import { useCredits } from '@/hooks/useCredits';
 import { useGeoHudFlow } from '@/hooks/useGeoHudFlow';
 import { usePromo } from '@/hooks/usePromo';
+import { useTranscriptLog } from '@/hooks/useTranscriptLog';
 import { resolveBrainMode } from '@/lib/brainMode';
 import { useSorenVoice, setVoiceSessionLog } from '@/lib/soren-voice/soren-voice-provider';
 import { useInterrupt } from '@/lib/soren-voice/use-interrupt';
-import { useSorenChatLog } from '@/lib/soren-voice/use-soren-chat-log';
 
 export default function GeoHud() {
   const { email } = useCredits();
@@ -29,7 +29,10 @@ export default function GeoHud() {
   const interrupt = useInterrupt();
   const [muted, setMuted] = useState(false);
 
-  useSorenChatLog(flow.append);
+  useTranscriptLog(voice.room, {
+    onUserLine: (text) => flow.append(`You: ${text}`),
+    onSorenLine: (text) => flow.append(`Soren: ${text}`),
+  });
 
   useEffect(() => {
     setVoiceSessionLog(flow.append);
