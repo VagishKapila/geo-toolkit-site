@@ -28,16 +28,17 @@ import { NameModal } from './name-modal';
 import { fireActivationAudio } from './activation-audio';
 import { mapAgentState, STATE_BADGE } from './agent-state';
 import {
-  armTokenFetch,
+  clearSessionTokenCache,
   getSharedRoom,
   getSharedTokenSource,
   isRoomSessionLive,
+  markSessionRequested,
   releaseConnect,
-  resetForNewSession,
   teardownSession,
   tryAcquireConnect,
   voiceSessionLog,
 } from './session-lifecycle';
+import { useWakeTrigger } from './use-wake-trigger';
 import { USER_NAME_KEY } from './constants';
 
 export interface SorenVoiceContextValue {
@@ -52,6 +53,10 @@ export interface SorenVoiceContextValue {
 
 const SorenVoiceContext = createContext<SorenVoiceContextValue | null>(null);
 
+/**
+ * LIVE voice stack — sole path from TALK TO SOREN → session.start().
+ * HudLeftPanel onClick → GeoHud onTalk={activate} → connect() → session.start()
+ */
 function SorenVoiceBridge({
   room,
   session,
@@ -69,6 +74,8 @@ function SorenVoiceBridge({
 }) {
   const { isConnected } = useSessionContext();
   const { state: rawAgentState } = useVoiceAssistant();
+  useWakeTrigger(room);
+
   const agentState = mapAgentState(rawAgentState as string | undefined);
   const agentBadge = STATE_BADGE[agentState] ?? '○ STANDBY';
   const statusLabel = isConnected ? agentBadge.replace(/^[○◉◈◇]\s*/, '') : 'READY';
@@ -95,7 +102,6 @@ function SorenVoiceBridge({
   );
 }
 
-/** HUD voice brainstem — one room, one token per user-initiated session. */
 export function SorenVoiceProvider({ children }: { children: ReactNode }) {
   const [showNameModal, setShowNameModal] = useState(false);
   const pendingConnectRef = useRef(false);
@@ -147,8 +153,7 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
       if (room.state !== ConnectionState.Disconnected) {
         await room.disconnect();
       }
-      resetForNewSession();
-      armTokenFetch();
+      clearSessionTokenCache();
       console.log('[voice] connecting');
       voiceSessionLog('Soren: Connecting…');
       await session.start();
@@ -166,6 +171,7 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
       console.log('[voice] activate skipped — session already active');
       return;
     }
+    markSessionRequested();
     fireActivationAudio();
     const storedName = localStorage.getItem(USER_NAME_KEY);
     if (!storedName) {
@@ -173,7 +179,6 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
       setShowNameModal(true);
       return;
     }
-    armTokenFetch();
     void connect();
   }, [connect, room]);
 
@@ -185,7 +190,7 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
         pendingConnectRef.current = false;
         return;
       }
-      armTokenFetch();
+      markSessionRequested();
       localStorage.setItem(USER_NAME_KEY, name);
       setShowNameModal(false);
       if (pendingConnectRef.current) {

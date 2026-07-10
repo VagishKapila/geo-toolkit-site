@@ -13,10 +13,7 @@ let sharedTokenSource: ReturnType<typeof TokenSource.custom> | null = null;
 
 let cachedToken: TokenSourceResponseObject | null = null;
 let tokenFetchInFlight: Promise<TokenSourceResponseObject> | null = null;
-
-let fetchGate: Promise<void> | null = null;
-let openFetchGate: (() => void) | null = null;
-let tokenArmed = false;
+let sessionRequested = false;
 
 let connectInFlight = false;
 
@@ -30,20 +27,6 @@ export function voiceSessionLog(line: string): void {
   voiceLogFn?.(line);
 }
 
-function ensureFetchGate(): Promise<void> {
-  if (!fetchGate) {
-    fetchGate = new Promise<void>((resolve) => {
-      openFetchGate = resolve;
-    });
-  }
-  return fetchGate;
-}
-
-async function waitUntilArmed(): Promise<void> {
-  if (tokenArmed) return;
-  await ensureFetchGate();
-}
-
 function tokenRoomName(token: string): string {
   try {
     const payload = decodeTokenPayload(token);
@@ -53,21 +36,9 @@ function tokenRoomName(token: string): string {
   }
 }
 
-/** Unblocks token HTTP — must run synchronously on user click before session.start(). */
-export function armTokenFetch(): void {
-  console.log('[voice] armed');
-  tokenArmed = true;
-  if (openFetchGate) {
-    openFetchGate();
-    openFetchGate = null;
-  } else {
-    fetchGate = Promise.resolve();
-  }
-}
-
-export function resetFetchGate(): void {
-  fetchGate = null;
-  openFetchGate = null;
+/** Set synchronously on TALK TO SOREN / name submit before session.start(). */
+export function markSessionRequested(): void {
+  sessionRequested = true;
 }
 
 export function clearSessionTokenCache(): void {
@@ -75,10 +46,10 @@ export function clearSessionTokenCache(): void {
   tokenFetchInFlight = null;
 }
 
-export function resetForNewSession(): void {
+export function resetVoiceSession(): void {
   clearSessionTokenCache();
-  tokenArmed = false;
-  resetFetchGate();
+  sessionRequested = false;
+  releaseConnect();
 }
 
 async function fetchSessionToken(): Promise<TokenSourceResponseObject> {
@@ -88,15 +59,11 @@ async function fetchSessionToken(): Promise<TokenSourceResponseObject> {
   }
   if (tokenFetchInFlight) return tokenFetchInFlight;
 
-  tokenFetchInFlight = (async () => {
-    if (!tokenArmed) {
-      await waitUntilArmed();
-    }
-    if (!tokenArmed) {
-      console.error('[voice] token fetch while unarmed');
-      armTokenFetch();
-    }
+  if (!sessionRequested) {
+    throw new Error('[voice] token fetch before session requested');
+  }
 
+  tokenFetchInFlight = (async () => {
     const userVoiceToken = await mintVoiceToken();
     const storedName = localStorage.getItem(USER_NAME_KEY);
 
@@ -173,8 +140,7 @@ export function releaseConnect(): void {
 }
 
 export async function teardownSession(room: Room): Promise<void> {
-  resetForNewSession();
-  releaseConnect();
+  resetVoiceSession();
   if (room.state !== ConnectionState.Disconnected) {
     await room.disconnect();
   }
