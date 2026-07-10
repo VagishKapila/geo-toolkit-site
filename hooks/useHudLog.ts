@@ -11,5 +11,9 @@ export function useHudLog() {
     setLines((prev) => [...prev, msg]);
   }, []);
 
-  return { lines, append };
+  const clear = useCallback(() => {
+    setLines(['Ready. Talk to Soren or type a website.']);
+  }, []);
+
+  return { lines, append, clear };
 }
