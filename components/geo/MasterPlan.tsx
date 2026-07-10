@@ -1,17 +1,21 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import type { GeoAudit } from '@/lib/geoApi';
 import { projectedScore } from '@/lib/geoMetrics';
 import type { usePromo } from '@/hooks/usePromo';
-
-const CALENDLY = 'https://calendly.com/vaakapila';
+import {
+  triggerAiPackageCheckout,
+  triggerDiyDownload,
+  triggerDoItForMeCheckout,
+} from '@/lib/fixDeliveryActions';
 
 type PromoState = ReturnType<typeof usePromo>;
 
 interface Props {
   audit: GeoAudit;
   promo: PromoState;
-  onOpenFix: () => void;
+  accountEmail: string;
   onOpenPartner: () => void;
   onBackToResults: () => void;
   onClose: () => void;
@@ -21,13 +25,33 @@ interface Props {
 export function MasterPlan({
   audit,
   promo,
-  onOpenFix,
+  accountEmail,
   onOpenPartner,
   onBackToResults,
   onClose,
   onLog,
 }: Props) {
+  const planRef = useRef<HTMLElement>(null);
+  const promoPanelRef = useRef<HTMLDivElement>(null);
+  const promoCodeRef = useRef<HTMLInputElement>(null);
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const projected = projectedScore(audit);
+
+  useEffect(() => {
+    planRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, []);
+
+  const revealPromo = () => {
+    setPromoOpen(true);
+    requestAnimationFrame(() => {
+      promoPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      setTimeout(() => promoCodeRef.current?.focus(), 80);
+    });
+  };
+
+  const resolveEmail = () => (promo.email.trim() || accountEmail.trim());
 
   const handleVerify = async () => {
     const ok = await promo.verify();
@@ -35,15 +59,78 @@ export function MasterPlan({
     else onLog('Partner or invitation code could not be verified.');
   };
 
+  const runDiy = async () => {
+    setActionError(null);
+    setBusy(true);
+    try {
+      await triggerDiyDownload(audit);
+      onLog('DIY complete ZIP selected — files downloading.');
+    } catch {
+      setActionError('Download failed. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runAiAssist = async () => {
+    setActionError(null);
+    if (promo.unlocked) {
+      await runDiy();
+      onLog('AI Assist selected with sponsored access.');
+      return;
+    }
+    const email = resolveEmail();
+    if (!email) {
+      setActionError('Enter your email on the Master Plan to purchase the AI package.');
+      revealPromo();
+      return;
+    }
+    setBusy(true);
+    try {
+      const err = await triggerAiPackageCheckout(audit, email);
+      if (err) setActionError(err);
+      else onLog('AI Assist selected — redirecting to checkout ($1.99).');
+    } catch {
+      setActionError('Could not start checkout. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runDoItForMe = async () => {
+    setActionError(null);
+    if (promo.unlocked) {
+      window.open('https://calendly.com/vaakapila', '_blank', 'noopener,noreferrer');
+      onLog('Done-with-you selected with sponsored access.');
+      return;
+    }
+    const email = resolveEmail();
+    if (!email) {
+      setActionError('Enter your email on the Master Plan to book a fix session.');
+      revealPromo();
+      return;
+    }
+    setBusy(true);
+    try {
+      const err = await triggerDoItForMeCheckout(audit, email);
+      if (err) setActionError(err);
+      else onLog('Do it for me selected — redirecting to checkout ($9.00).');
+    } catch {
+      setActionError('Could not start checkout. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const aiLabel = promo.unlocked ? 'Included' : '$1.99';
-  const guidedLabel = promo.unlocked ? 'Included' : '$5';
+  const guidedLabel = promo.unlocked ? 'Included' : '$9.00';
   const aiBtn = promo.unlocked ? 'CONTINUE WITH AI ASSIST' : 'USE AI ASSIST';
   const guidedBtn = promo.unlocked
     ? 'START SPONSORED FULL FIX'
     : 'START FULL FIX';
 
   return (
-    <section className="screen active">
+    <section className="screen active" ref={planRef}>
       <div className="screenTopBar">
         <span className="screenHint">
           Choose how to execute the complete repair plan.
@@ -83,50 +170,60 @@ export function MasterPlan({
         </div>
       </div>
 
+      {actionError && (
+        <div className="promoMessage error">{actionError}</div>
+      )}
+
       <div
+        ref={promoPanelRef}
         className="sponsoredPanel"
         style={promo.unlocked ? { borderColor: '#8bcdbd' } : undefined}
       >
         <div className="sponsoredHeader">
           <div>
             <div className="sponsoredEyebrow">Partner / Invitation Access</div>
-            <h3>Have a sponsored access code?</h3>
+            <button type="button" className="promoRevealLink" onClick={revealPromo}>
+              <h3>Have a sponsored access code?</h3>
+            </button>
             <p>Enter it here to unlock eligible paid services without checkout.</p>
           </div>
           <button type="button" className="btn soft" onClick={onOpenPartner}>
             Open Partner Access
           </button>
         </div>
-        <label htmlFor="promoEmailInput" className="promoEmailLabel">
-          Email (required to redeem)
-        </label>
-        <input
-          id="promoEmailInput"
-          type="email"
-          autoComplete="email"
-          className="promoEmailInput"
-          placeholder="you@company.com"
-          value={promo.email}
-          onChange={(e) => promo.setEmail(e.target.value)}
-        />
-        <div className="sponsoredQuickRow">
+        <div className={`promoBody${promoOpen ? ' show' : ''}`}>
+          <label htmlFor="promoEmailInput" className="promoEmailLabel">
+            Email (required to redeem)
+          </label>
           <input
-            id="promoInput"
-            autoComplete="off"
-            placeholder="ENTER PARTNER OR INVITATION CODE"
-            value={promo.code}
-            onChange={(e) => promo.setCode(e.target.value.toUpperCase())}
-            onKeyDown={(e) => e.key === 'Enter' && void handleVerify()}
+            id="promoEmailInput"
+            type="email"
+            autoComplete="email"
+            className="promoEmailInput"
+            placeholder="you@company.com"
+            value={promo.email}
+            onChange={(e) => promo.setEmail(e.target.value)}
           />
-          <button type="button" className="btn primary" onClick={() => void handleVerify()}>
-            {promo.verifying ? 'Verifying…' : 'Verify Code'}
-          </button>
-        </div>
-        {promo.message && (
-          <div className={`promoMessage ${promo.message.type}`}>
-            {promo.message.text}
+          <div className="sponsoredQuickRow">
+            <input
+              ref={promoCodeRef}
+              id="promoInput"
+              autoComplete="off"
+              placeholder="ENTER PARTNER OR INVITATION CODE"
+              value={promo.code}
+              onChange={(e) => promo.setCode(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === 'Enter' && void handleVerify()}
+            />
+            <button type="button" className="btn primary" onClick={() => void handleVerify()}>
+              {promo.verifying ? 'Verifying…' : 'Verify Code'}
+            </button>
           </div>
-        )}
+          {promo.message && (
+            <div className={`promoMessage ${promo.message.type}`}>
+              {promo.message.text}
+            </div>
+          )}
+        </div>
       </div>
 
       {promo.unlocked && (
@@ -144,15 +241,8 @@ export function MasterPlan({
             One complete package with files, snippets, and instructions. No
             payment. We ask for a GitHub star if it helps.
           </p>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              onLog('DIY complete ZIP selected.');
-              onOpenFix();
-            }}
-          >
-            DOWNLOAD PACKAGE
+          <button type="button" className="btn" disabled={busy} onClick={() => void runDiy()}>
+            {busy ? 'PREPARING…' : 'DOWNLOAD PACKAGE'}
           </button>
         </div>
         <div className={`execCard${promo.unlocked ? ' unlocked' : ''}`}>
@@ -165,42 +255,26 @@ export function MasterPlan({
           <button
             type="button"
             className="btn"
-            onClick={() => {
-              onLog(
-                promo.unlocked
-                  ? 'AI Assist selected with sponsored access.'
-                  : 'AI Assist selected.',
-              );
-              onOpenFix();
-            }}
+            disabled={busy}
+            onClick={() => void runAiAssist()}
           >
-            {aiBtn}
+            {busy ? 'LOADING…' : aiBtn}
           </button>
         </div>
         <div className={`execCard${promo.unlocked ? ' unlocked' : ''}`}>
-          <h3>Done with you</h3>
+          <h3>Do it for me</h3>
           <div className="price">{guidedLabel}</div>
           <p>
-            Soren guides the full repair plan with you and re-checks the score
-            afterward.
+            Book a guided fix session. Soren walks through the full repair plan
+            with you and re-checks the score afterward.
           </p>
           <button
             type="button"
             className="btn amber"
-            onClick={() => {
-              onLog(
-                promo.unlocked
-                  ? 'Done-with-you selected with sponsored access.'
-                  : 'Done-with-you full fix selected.',
-              );
-              if (!promo.unlocked) {
-                window.open(CALENDLY, '_blank', 'noopener,noreferrer');
-              } else {
-                onOpenFix();
-              }
-            }}
+            disabled={busy}
+            onClick={() => void runDoItForMe()}
           >
-            {guidedBtn}
+            {busy ? 'LOADING…' : guidedBtn}
           </button>
         </div>
       </div>

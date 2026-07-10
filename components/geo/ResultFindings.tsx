@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import type { GeoCheck } from '@/lib/geoApi';
 
 type FilterKind = 'all' | 'issue' | 'warn' | 'pass';
@@ -37,12 +38,19 @@ export function ResultFindings({
   onGoHome,
   onShowAll,
 }: Props) {
+  const detailRef = useRef<HTMLDivElement>(null);
   const failing = checks.filter((c) => !c.passed);
   const warnings = checks.filter((c) => !c.passed && (c.points ?? 0) > 0);
   const passing = checks.filter((c) => c.passed);
   const visible = checks.filter((c) => filter === 'all' || findingKind(c) === filter);
   const openCheck = checks.find((c) => c.name === openKey);
   const ringGradient = `conic-gradient(var(--red) 0 ${score}%, var(--amber) ${score}% ${Math.min(score + 20, 100)}%, rgba(255,255,255,.08) ${Math.min(score + 20, 100)}%)`;
+
+  useEffect(() => {
+    if (openKey) {
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [openKey]);
 
   return (
     <>
@@ -125,7 +133,10 @@ export function ResultFindings({
           );
         })}
       </div>
-      <div className={`detailDrop${openCheck ? ' show' : ''}`}>
+      <div
+        ref={detailRef}
+        className={`detailDrop${openCheck ? ' show' : ''}`}
+      >
         {openCheck && (
           <>
             <h3>{openCheck.name}</h3>

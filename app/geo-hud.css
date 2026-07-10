@@ -417,6 +417,37 @@
   font-weight: 900;
 }
 
+.geo-hud-app .heardCard {
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #cfe1df;
+  border-radius: 16px;
+  padding: 22px;
+  cursor: text;
+}
+
+.geo-hud-app .heardInput {
+  display: block;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #175d56;
+  font-size: 34px;
+  font-weight: 900;
+  padding: 0;
+  margin: 0;
+  outline: none;
+  font-family: inherit;
+}
+
+.geo-hud-app .heardInput:focus {
+  border-color: #71b8ae;
+  box-shadow: 0 0 0 4px rgba(31, 127, 115, 0.1);
+}
+
+.geo-hud-app .heardCard small,
 .geo-hud-app .heard small {
   display: block;
   color: var(--muted);
@@ -466,6 +497,15 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 14px;
+}
+
+.geo-hud-app .editActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 177, 74, 0.32);
 }
 
 .geo-hud-app .scanGrid {
@@ -1546,6 +1586,35 @@
 
 .geo-hud-app .promoApplied.show {
   display: block;
+}
+
+.geo-hud-app .promoBody {
+  display: none;
+}
+
+.geo-hud-app .promoBody.show {
+  display: block;
+}
+
+.geo-hud-app .promoRevealLink {
+  display: block;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0 0 6px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.geo-hud-app .promoRevealLink h3 {
+  margin: 0;
+  color: #183942;
+  font-size: 22px;
+}
+
+.geo-hud-app .promoRevealLink:hover h3 {
+  color: #1a5e58;
 }
 
 .geo-hud-app .execCard.unlocked {
