@@ -4,9 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { GeoAudit } from '@/lib/geoApi';
 import { projectedScore } from '@/lib/geoMetrics';
 import type { usePromo } from '@/hooks/usePromo';
+import { FixPackageDelivered } from '@/components/geo/FixPackageDelivered';
 import {
+  deliverAiPackage,
+  deliverDiyPackage,
+  downloadFixZip,
+  type FixPackageResponse,
   triggerAiPackageCheckout,
-  triggerDiyDownload,
   triggerDoItForMeCheckout,
 } from '@/lib/fixDeliveryActions';
 
@@ -37,6 +41,8 @@ export function MasterPlan({
   const [promoOpen, setPromoOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [delivered, setDelivered] = useState<FixPackageResponse | null>(null);
+  const [deliveredTier, setDeliveredTier] = useState<'diy' | 'ai'>('diy');
   const projected = projectedScore(audit);
 
   useEffect(() => {
@@ -63,8 +69,10 @@ export function MasterPlan({
     setActionError(null);
     setBusy(true);
     try {
-      await triggerDiyDownload(audit);
-      onLog('DIY complete ZIP selected — files downloading.');
+      const pkg = await deliverDiyPackage(audit);
+      setDeliveredTier('diy');
+      setDelivered(pkg);
+      onLog('DIY ZIP downloaded — open README.md first (surgical fixes only).');
     } catch {
       setActionError('Download failed. Try again.');
     } finally {
@@ -75,8 +83,17 @@ export function MasterPlan({
   const runAiAssist = async () => {
     setActionError(null);
     if (promo.unlocked) {
-      await runDiy();
-      onLog('AI Assist selected with sponsored access.');
+      setBusy(true);
+      try {
+        const pkg = await deliverAiPackage(audit);
+        setDeliveredTier('ai');
+        setDelivered(pkg);
+        onLog('AI Assist ZIP downloaded — paste PROMPT.txt into ChatGPT or Claude.');
+      } catch {
+        setActionError('Package build failed. Try again.');
+      } finally {
+        setBusy(false);
+      }
       return;
     }
     const email = resolveEmail();
@@ -128,6 +145,18 @@ export function MasterPlan({
   const guidedBtn = promo.unlocked
     ? 'START SPONSORED FULL FIX'
     : 'START FULL FIX';
+
+  if (delivered) {
+    return (
+      <FixPackageDelivered
+        pkg={delivered}
+        siteUrl={audit.url}
+        tier={deliveredTier}
+        onClose={() => setDelivered(null)}
+        onRedownload={() => void downloadFixZip(delivered, audit.url, deliveredTier)}
+      />
+    );
+  }
 
   return (
     <section className="screen active" ref={planRef}>
@@ -238,19 +267,19 @@ export function MasterPlan({
           <h3>Do it yourself</h3>
           <div className="price">ZIP</div>
           <p>
-            One complete package with files, snippets, and instructions. No
-            payment. We ask for a GitHub star if it helps.
+            One ZIP with only your failing checks — README tells you what to
+            merge or add. Do not replace your whole site. Free.
           </p>
           <button type="button" className="btn" disabled={busy} onClick={() => void runDiy()}>
-            {busy ? 'PREPARING…' : 'DOWNLOAD PACKAGE'}
+            {busy ? 'PREPARING…' : 'GET THE FILES'}
           </button>
         </div>
         <div className={`execCard${promo.unlocked ? ' unlocked' : ''}`}>
           <h3>AI Assist</h3>
           <div className="price">{aiLabel}</div>
           <p>
-            Soren writes one complete prompt and code package for Claude,
-            ChatGPT, or Cursor.
+            ZIP + PROMPT.txt — paste into ChatGPT or Claude and finish in 5–10
+            minutes. Surgical fixes only.
           </p>
           <button
             type="button"

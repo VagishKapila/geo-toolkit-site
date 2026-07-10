@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import '@/app/geo-hud.css';
 import AuditResults from '@/components/AuditResults';
 import {
@@ -19,6 +19,15 @@ import { usePromo } from '@/hooks/usePromo';
 import { useTranscriptLog } from '@/hooks/useTranscriptLog';
 import { resolveBrainMode } from '@/lib/brainMode';
 import { useSorenVoice, setVoiceSessionLog } from '@/lib/soren-voice/soren-voice-provider';
+import { FixPackageDelivered } from '@/components/geo/FixPackageDelivered';
+import { BookingConfirmed } from '@/components/geo/BookingConfirmed';
+import {
+  CALENDLY,
+  deliverAiPackageFromStored,
+  downloadFixZip,
+  type FixPackageResponse,
+  type StoredAiPackageData,
+} from '@/lib/fixDeliveryActions';
 import { useInterrupt } from '@/lib/soren-voice/use-interrupt';
 
 export default function GeoHud() {
@@ -28,6 +37,69 @@ export default function GeoHud() {
   const promo = usePromo();
   const interrupt = useInterrupt();
   const [muted, setMuted] = useState(false);
+  const [checkoutDelivery, setCheckoutDelivery] = useState<{
+    pkg: FixPackageResponse;
+    siteUrl: string;
+  } | null>(null);
+  const [bookingConfirmed, setBookingConfirmed] = useState(false);
+  const handledCheckoutRef = useRef(false);
+
+  useEffect(() => {
+    if (handledCheckoutRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+
+    const bookingReturn =
+      params.get('call_success') === 'true'
+      || params.get('booking_success') === 'true';
+
+    if (bookingReturn) {
+      handledCheckoutRef.current = true;
+      const calendly = params.get('calendly') || CALENDLY;
+      window.history.replaceState({}, '', window.location.pathname);
+      window.open(calendly, '_blank', 'noopener,noreferrer');
+      setBookingConfirmed(true);
+      flow.append('Payment confirmed — book your screen-share session on Calendly.');
+      return;
+    }
+
+    if (params.get('ai_package_success') !== 'true') return;
+
+    handledCheckoutRef.current = true;
+
+    const raw = sessionStorage.getItem('soren_ai_package_data');
+    window.history.replaceState({}, '', window.location.pathname);
+    if (!raw) {
+      flow.append(
+        'Payment received — reopen Master Plan from your scan to download your AI package.',
+      );
+      return;
+    }
+
+    let data: StoredAiPackageData;
+    try {
+      data = JSON.parse(raw) as StoredAiPackageData;
+    } catch {
+      flow.append('Could not restore AI package session. Re-scan your site.');
+      return;
+    }
+    sessionStorage.removeItem('soren_ai_package_data');
+
+    void (async () => {
+      try {
+        flow.append('AI Assist payment confirmed — building your ZIP…');
+        const pkg = await deliverAiPackageFromStored(data);
+        setCheckoutDelivery({ pkg, siteUrl: data.siteInfo.url });
+        flow.append(
+          'ZIP downloaded. Open README.md, then paste PROMPT.txt into ChatGPT or Claude.',
+        );
+      } catch {
+        flow.append('Could not build AI package. Try again from Master Plan.');
+      }
+    })();
+    // Mount-only: handle Stripe return URLs once (sessionStorage is consumed).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow.append]);
+
 
   useTranscriptLog(voice.room, {
     onUserLine: (text) => flow.append(`You: ${text}`),
@@ -157,7 +229,25 @@ export default function GeoHud() {
         <section className="center">
           <StepRail active={flow.railStep} />
           <section className="panel workspace">
-            {flow.phase === 'input' && (
+            {bookingConfirmed && (
+              <BookingConfirmed onClose={() => setBookingConfirmed(false)} />
+            )}
+            {!bookingConfirmed && checkoutDelivery && (
+              <FixPackageDelivered
+                pkg={checkoutDelivery.pkg}
+                siteUrl={checkoutDelivery.siteUrl}
+                tier="ai"
+                onClose={() => setCheckoutDelivery(null)}
+                onRedownload={() =>
+                  void downloadFixZip(
+                    checkoutDelivery.pkg,
+                    checkoutDelivery.siteUrl,
+                    'ai',
+                  )
+                }
+              />
+            )}
+            {!bookingConfirmed && !checkoutDelivery && flow.phase === 'input' && (
               <GeoInputScreen
                 url={flow.url}
                 error={flow.error}
@@ -166,7 +256,7 @@ export default function GeoHud() {
                 onStartVoice={() => void startVoiceConversation()}
               />
             )}
-            {flow.phase === 'confirm' && (
+            {!bookingConfirmed && !checkoutDelivery && flow.phase === 'confirm' && (
               <GeoConfirmScreen
                 heardUrl={flow.heardUrl}
                 countdown={flow.countdown}
@@ -178,10 +268,10 @@ export default function GeoHud() {
                 onResume={resumeConfirmEdit}
               />
             )}
-            {flow.phase === 'scanning' && (
+            {!bookingConfirmed && !checkoutDelivery && flow.phase === 'scanning' && (
               <GeoScanScreen heardUrl={flow.heardUrl} />
             )}
-            {flow.phase === 'result' && flow.audit && (
+            {!bookingConfirmed && !checkoutDelivery && flow.phase === 'result' && flow.audit && (
               <AuditResults
                 audit={flow.audit}
                 autoOpenFix={flow.voiceRequestedFix}
