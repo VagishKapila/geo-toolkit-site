@@ -12,7 +12,7 @@ type AgentState =
   | 'speaking'
   | undefined;
 
-type Phase = 'input' | 'confirm' | 'scanning' | 'result';
+type Phase = 'input' | 'confirm' | 'scanning' | 'scan_failed' | 'result';
 
 export function resolveBrainMode(
   phase: Phase,
@@ -21,6 +21,7 @@ export function resolveBrainMode(
   voiceRequestedFix: boolean,
 ): BrainMode {
   if (phase === 'scanning') return 'scanning';
+  if (phase === 'scan_failed') return 'idle';
   if (phase === 'confirm') return 'confirming';
   if (phase === 'result') return voiceRequestedFix ? 'repair' : 'results';
   if (!connected) return 'idle';
