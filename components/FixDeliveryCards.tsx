@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { getSharedRoom, teardownSession } from '@/lib/soren-voice/session-lifecycle';
 
 const API =
   'https://toolkit-demo-host-production-ac14.up.railway.app';
@@ -161,6 +162,7 @@ export function FixDeliveryCards({
             siteInfo,
           }),
         );
+        await teardownSession(getSharedRoom());
         window.location.href = data.checkoutUrl;
       } else {
         setError('Could not start checkout. Try again.');
@@ -196,6 +198,7 @@ export function FixDeliveryCards({
       });
       const data = await res.json();
       if (data.checkoutUrl) {
+        await teardownSession(getSharedRoom());
         window.location.href = data.checkoutUrl;
       } else {
         setError('Could not start checkout. Try again.');
