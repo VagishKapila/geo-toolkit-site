@@ -1,5 +1,7 @@
 'use client';
 
+import { useRef } from 'react';
+
 interface ConfirmProps {
   heardUrl: string;
   countdown: number;
@@ -21,37 +23,65 @@ export function GeoConfirmScreen({
   onSaveScan,
   onResume,
 }: ConfirmProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const focusAndPause = () => {
+    onEdit();
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  };
+
   return (
     <section className="screen active">
       <div className="confirmBig">
         <label>Soren heard this website</label>
-        <button type="button" className="heard" onClick={onEdit}>
-          {heardUrl}
+        <div
+          className="heardCard"
+          role="button"
+          tabIndex={0}
+          onClick={focusAndPause}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              focusAndPause();
+            }
+          }}
+        >
+          <input
+            ref={inputRef}
+            className="heardInput"
+            value={heardUrl}
+            aria-label="Heard website URL"
+            onChange={(e) => onHeardChange(e.target.value)}
+            onFocus={onEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                onSaveScan();
+              }
+            }}
+          />
           <small>Click this card to pause the countdown and edit spelling.</small>
-        </button>
+        </div>
         <div className="confirmRow">
           <div className="timer">{countdown}</div>
-          <button type="button" className="btn secondary" onClick={onEdit}>
+          <button type="button" className="btn secondary" onClick={focusAndPause}>
             EDIT SPELLING
           </button>
           <button type="button" className="btn amber" onClick={onConfirmNow}>
             CONFIRM NOW
           </button>
         </div>
-        <div className={`editPanel${editing ? ' show' : ''}`}>
-          <input
-            autoFocus={editing}
-            value={heardUrl}
-            onChange={(e) => onHeardChange(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && onSaveScan()}
-          />
-          <button type="button" className="btn" onClick={onSaveScan}>
-            SAVE &amp; SCAN
-          </button>
-          <button type="button" className="btn secondary" onClick={onResume}>
-            RESUME 8 SEC
-          </button>
-        </div>
+        {editing && (
+          <div className="editActions">
+            <button type="button" className="btn" onClick={onSaveScan}>
+              SAVE &amp; SCAN
+            </button>
+            <button type="button" className="btn secondary" onClick={onResume}>
+              RESUME 8 SEC
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

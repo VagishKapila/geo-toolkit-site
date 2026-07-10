@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FixDeliveryCards } from '@/components/FixDeliveryCards';
 import { MasterPlan } from '@/components/geo/MasterPlan';
 import { PartnerAccessScreen } from '@/components/geo/PartnerAccessScreen';
 import { ResultFindings } from '@/components/geo/ResultFindings';
@@ -41,7 +40,6 @@ export default function AuditResults({
   onBackToResults,
   promo,
 }: Props) {
-  const [showFix, setShowFix] = useState(false);
   const [filter, setFilter] = useState<FilterKind>('all');
   const [openKey, setOpenKey] = useState<string | null>(null);
 
@@ -49,7 +47,6 @@ export default function AuditResults({
     if (autoOpenFix) {
       onShowMaster(true);
       onRailStep('execute');
-      setShowFix(true);
       onLog('Master Repair Plan opened from voice agent.');
     }
   }, [autoOpenFix, onLog, onRailStep, onShowMaster]);
@@ -72,29 +69,19 @@ export default function AuditResults({
 
   if (showMaster) {
     return (
-      <>
-        <MasterPlan
-          audit={audit}
-          promo={promo}
-          onOpenFix={() => setShowFix(true)}
-          onOpenPartner={() => {
-            onShowPartner(true);
-            onRailStep('execute');
-            onLog('Partner and invitation access screen opened.');
-          }}
-          onBackToResults={onBackToResults}
-          onClose={onGoHome}
-          onLog={onLog}
-        />
-        {showFix && (
-          <FixDeliveryCards
-            auditResult={audit}
-            email={email}
-            onClose={() => setShowFix(false)}
-            speak={() => {}}
-          />
-        )}
-      </>
+      <MasterPlan
+        audit={audit}
+        promo={promo}
+        accountEmail={email}
+        onOpenPartner={() => {
+          onShowPartner(true);
+          onRailStep('execute');
+          onLog('Partner and invitation access screen opened.');
+        }}
+        onBackToResults={onBackToResults}
+        onClose={onGoHome}
+        onLog={onLog}
+      />
     );
   }
 
@@ -130,14 +117,6 @@ export default function AuditResults({
           onLog('Full scan restored. Showing all checks.');
         }}
       />
-      {showFix && (
-        <FixDeliveryCards
-          auditResult={audit}
-          email={email}
-          onClose={() => setShowFix(false)}
-          speak={() => {}}
-        />
-      )}
     </section>
   );
 }

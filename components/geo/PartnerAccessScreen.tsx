@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import type { usePromo } from '@/hooks/usePromo';
 
 type PromoState = ReturnType<typeof usePromo>;
@@ -17,6 +18,16 @@ export function PartnerAccessScreen({
   onContinue,
   onLog,
 }: Props) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      setTimeout(() => codeRef.current?.focus(), 80);
+    });
+  }, []);
+
   const handleVerify = async () => {
     const ok = await promo.verify();
     if (ok) {
@@ -51,7 +62,7 @@ export function PartnerAccessScreen({
             voice.
           </p>
         </div>
-        <div className="partnerCodeCard">
+        <div ref={panelRef} className="partnerCodeCard">
           <label htmlFor="partnerEmailInput">Email (required to redeem)</label>
           <input
             id="partnerEmailInput"
@@ -65,6 +76,7 @@ export function PartnerAccessScreen({
           <label htmlFor="partnerCodeInput">Partner or invitation code</label>
           <div className="partnerCodeRow">
             <input
+              ref={codeRef}
               id="partnerCodeInput"
               autoComplete="off"
               placeholder="ENTER CODE"
