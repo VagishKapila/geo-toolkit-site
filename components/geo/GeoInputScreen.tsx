@@ -93,7 +93,12 @@ export function GeoInputScreen({
           <p>One Master Repair Plan packages every recommended fix together.</p>
         </div>
       </div>
-      {error && <p className="geo-hud-error">{error}</p>}
+      {error && (
+        <div className="geo-hud-errorCard" role="alert">
+          <b>Couldn&apos;t scan that website</b>
+          <p>{error}</p>
+        </div>
+      )}
     </section>
   );
 }

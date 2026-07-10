@@ -10,9 +10,9 @@ import {
 import { useSorenEvents, type SorenEvent } from '@/lib/soren-voice/use-soren-events';
 import { teardownSession } from '@/lib/soren-voice/session-lifecycle';
 import { type RailStep } from '@/lib/geoMetrics';
-import { runAudit, type GeoAudit } from '@/lib/geoApi';
+import { runAudit, looksLikeWebsite, type GeoAudit } from '@/lib/geoApi';
 
-export type HudPhase = 'input' | 'confirm' | 'scanning' | 'result';
+export type HudPhase = 'input' | 'confirm' | 'scanning' | 'scan_failed' | 'result';
 
 function displayUrl(raw: string): string {
   return raw
@@ -25,27 +25,34 @@ export function useGeoHudFlow(room: Room) {
   const { lines, append, clear } = useHudLog();
   const [phase, setPhase] = useState<HudPhase>('input');
   const [railStep, setRailStep] = useState<RailStep>('input');
-  const [url, setUrl] = useState('');
+  const [url, setUrlState] = useState('');
   const [heardUrl, setHeardUrl] = useState('');
   const [countdown, setCountdown] = useState(8);
   const [editing, setEditing] = useState(false);
   const [audit, setAudit] = useState<GeoAudit | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [voiceRequestedFix, setVoiceRequestedFix] = useState(false);
   const [showMaster, setShowMaster] = useState(false);
   const [showPartner, setShowPartner] = useState(false);
   const processedVoiceRef = useRef<Set<string>>(new Set());
 
+  const setUrl = useCallback((value: string) => {
+    setUrlState(value);
+    setError(null);
+  }, []);
+
   const clearFlowState = useCallback(() => {
     processedVoiceRef.current.clear();
     setPhase('input');
     setRailStep('input');
-    setUrl('');
+    setUrlState('');
     setHeardUrl('');
     setCountdown(8);
     setEditing(false);
     setAudit(null);
     setError(null);
+    setScanError(null);
     setVoiceRequestedFix(false);
     setShowMaster(false);
     setShowPartner(false);
@@ -53,13 +60,34 @@ export function useGeoHudFlow(room: Room) {
   }, [clear]);
 
   const beginScan = useCallback(async (target: string) => {
+    const trimmed = target.trim();
+    if (!trimmed) {
+      const msg = 'Enter a website address before scanning.';
+      setError(msg);
+      setPhase('input');
+      setRailStep('input');
+      append(msg);
+      return;
+    }
+    if (!looksLikeWebsite(trimmed)) {
+      const msg =
+        "That doesn't look like a valid website. Try a domain like example.com.";
+      setUrl(trimmed);
+      setError(msg);
+      setPhase('input');
+      setRailStep('input');
+      append(msg);
+      return;
+    }
+
     setPhase('scanning');
     setRailStep('scan');
-    setHeardUrl(target.trim());
+    setHeardUrl(trimmed);
     setError(null);
-    append(`Scanning GEO signals for ${target.trim()}.`);
+    setScanError(null);
+    append(`Scanning GEO signals for ${trimmed}.`);
     try {
-      const result = await runAudit(target);
+      const result = await runAudit(trimmed);
       setAudit(result);
       setPhase('result');
       setRailStep('result');
@@ -68,16 +96,24 @@ export function useGeoHudFlow(room: Room) {
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Scan failed';
-      setUrl(target.trim());
-      setError(msg);
-      setPhase('input');
+      setUrl(trimmed);
+      setScanError(msg);
+      setPhase('scan_failed');
       setRailStep('input');
-      append(msg);
+      append(`Scan failed: ${msg}`);
     }
   }, [append]);
 
   const startConfirm = useCallback((target: string) => {
     const normalized = displayUrl(target);
+    if (!looksLikeWebsite(normalized)) {
+      const msg =
+        "That doesn't look like a valid website. Try a domain like example.com.";
+      setUrl(target.trim());
+      setError(msg);
+      append(msg);
+      return;
+    }
     setHeardUrl(normalized);
     setEditing(false);
     setCountdown(8);
@@ -164,8 +200,13 @@ export function useGeoHudFlow(room: Room) {
     setShowMaster(false);
     setShowPartner(false);
     setEditing(false);
+    setScanError(null);
     append('Returned home. Enter a new website when ready.');
   }, [append]);
+
+  const retryScan = useCallback(() => {
+    void beginScan(heardUrl || url);
+  }, [beginScan, heardUrl, url]);
 
   const backToResults = useCallback(() => {
     setShowMaster(false);
@@ -191,6 +232,7 @@ export function useGeoHudFlow(room: Room) {
     setEditing,
     audit,
     error,
+    scanError,
     voiceRequestedFix,
     showMaster,
     setShowMaster,
@@ -202,6 +244,7 @@ export function useGeoHudFlow(room: Room) {
     prepareNewConversation,
     endSession,
     goToInput,
+    retryScan,
     backToResults,
   };
 }
