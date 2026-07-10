@@ -1,5 +1,6 @@
 'use client';
 
+import { Mic } from 'lucide-react';
 import type { BrainMode } from '@/components/SorenBrain';
 import { SorenBrain } from '@/components/SorenBrain';
 
@@ -8,9 +9,10 @@ interface Props {
   modeLine: string;
   connected: boolean;
   onTalk: () => void;
-  onTypeWebsite: () => void;
+  onEnterUrl: () => void;
   onViewMaster: () => void;
   hasResult: boolean;
+  showEnterUrl: boolean;
 }
 
 export function HudLeftPanel({
@@ -18,17 +20,17 @@ export function HudLeftPanel({
   modeLine,
   connected,
   onTalk,
-  onTypeWebsite,
+  onEnterUrl,
   onViewMaster,
   hasResult,
+  showEnterUrl,
 }: Props) {
   return (
     <section className="panel left">
       <div className="leftHead">
         <h2>SOREN</h2>
         <p>
-          Jarvis-style HUD for GEO audit, voice confirmation, findings, and one
-          Master Repair Plan.
+          Ambient GEO assistant — brain stays live while you type or talk.
         </p>
       </div>
       <div className="coreWrap">
@@ -43,21 +45,24 @@ export function HudLeftPanel({
         </div>
       </div>
       <div className="leftActions">
+        {showEnterUrl && (
+          <button
+            type="button"
+            aria-label="Enter a website URL"
+            className="btn soft enterUrlBtn"
+            onClick={onEnterUrl}
+          >
+            Check another URL
+          </button>
+        )}
         <button
           type="button"
           aria-label={connected ? 'Start a new conversation' : 'Talk to Soren'}
-          className="btn primary talkSorenBtn"
+          className="btn soft talkSorenBtn"
           onClick={onTalk}
         >
+          <Mic size={16} aria-hidden="true" />
           {connected ? 'New Conversation' : 'Talk to Soren'}
-        </button>
-        <button
-          type="button"
-          aria-label="Type a website instead"
-          className="btn soft typeWebsiteBtn"
-          onClick={onTypeWebsite}
-        >
-          Type Website Instead
         </button>
         {hasResult && (
           <button

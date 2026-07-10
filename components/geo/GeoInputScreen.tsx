@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import { Mic } from 'lucide-react';
 
 interface Props {
   url: string;
@@ -8,6 +9,16 @@ interface Props {
   onUrlChange: (v: string) => void;
   onStart: () => void;
   onStartVoice: () => void;
+}
+
+function urlErrorMessage(error: string): string {
+  if (/doesn't look like a valid website/i.test(error)) {
+    return error;
+  }
+  if (/enter a website/i.test(error)) {
+    return error;
+  }
+  return "We couldn't reach this website. Check the spelling and try again.";
 }
 
 export function GeoInputScreen({
@@ -20,67 +31,59 @@ export function GeoInputScreen({
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <section className="screen active hero">
-      <h2>Talk to Soren or type your website.</h2>
-      <p>
-        Soren welcomes every visitor and is ready to listen. Say the website
-        naturally, or type it below. Soren then shows what it heard for eight
-        seconds so the spelling can be corrected before the scan begins.
-      </p>
+    <section className="screen active hero heroTextFirst">
+      <h2>Check your website&apos;s AI readiness</h2>
 
-      <div className="voiceEntryCard">
-        <div className="voiceEntryCopy">
-          <span className="voiceEyebrow">Voice-first experience</span>
-          <h3>
-            &ldquo;Hi, I&rsquo;m Soren. Tell me the website you&rsquo;d like me
-            to check.&rdquo;
-          </h3>
-          <p>
-            No typing is required. Speak the domain, and Soren will show what it
-            heard with an 8-second edit window before starting the scan.
-          </p>
-        </div>
-        <button
-          type="button"
-          aria-label="Start talking to Soren"
-          className="voiceStartBtn"
-          onClick={onStartVoice}
-        >
-          <span aria-hidden="true" className="voicePulse" />
-          <span>
-            <strong>Talk to Soren</strong>
-            <small>Click once, then speak naturally</small>
-          </span>
-        </button>
-      </div>
-
-      <div className="entryDivider">
-        <span>or type the website</span>
-      </div>
-
-      <div className="urlBox">
-        <div>
-          <label>Type Website URL</label>
+      <div className="scanHeroForm">
+        <label htmlFor="websiteInput" className="scanHeroLabel">
+          Website URL
+        </label>
+        <div className="scanHeroRow">
           <input
             ref={inputRef}
             id="websiteInput"
+            className="scanHeroInput"
             value={url}
-            placeholder="varshyl.com"
+            placeholder="example.com"
+            autoComplete="url"
             onChange={(e) => onUrlChange(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && url.trim() && onStart()}
           />
+          <button
+            type="button"
+            className="scanWebsiteBtn"
+            disabled={!url.trim()}
+            onClick={onStart}
+          >
+            Scan Website
+          </button>
         </div>
+        {error && (
+          <div className="urlScanError" role="alert">
+            <span aria-hidden="true">⚠️</span>
+            <span>{urlErrorMessage(error)}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="entryDivider heroVoiceDivider">
+        <span>or</span>
+      </div>
+
+      <div className="orTalkToSoren">
+        <p className="orTalkLabel">Or talk to Soren</p>
         <button
           type="button"
-          className="btn"
-          disabled={!url.trim()}
-          onClick={onStart}
+          aria-label="Talk to Soren — say your website URL out loud"
+          className="orTalkBtn"
+          onClick={onStartVoice}
         >
-          Scan Typed Website
+          <Mic size={18} aria-hidden="true" />
+          <span>Say your URL out loud — Soren listens and confirms spelling</span>
         </button>
       </div>
 
-      <div className="startCards">
+      <div className="startCards heroBelowFold">
         <div className="infoCard">
           <b>Analysis first</b>
           <p>
@@ -93,12 +96,6 @@ export function GeoInputScreen({
           <p>One Master Repair Plan packages every recommended fix together.</p>
         </div>
       </div>
-      {error && (
-        <div className="geo-hud-errorCard" role="alert">
-          <b>Couldn&apos;t scan that website</b>
-          <p>{error}</p>
-        </div>
-      )}
     </section>
   );
 }

@@ -215,11 +215,12 @@ export default function GeoHud() {
           modeLine={modeLine}
           connected={voice.isConnected}
           onTalk={() => void startVoiceConversation()}
-          onTypeWebsite={() => {
+          onEnterUrl={() => {
             flow.goToInput();
             setTimeout(focusWebsiteInput, 60);
-            flow.append('Type the website, then choose Scan Typed Website.');
+            flow.append('Enter a website URL to scan.');
           }}
+          showEnterUrl={flow.phase !== 'input'}
           onViewMaster={() => {
             flow.setShowMaster(true);
             flow.setRailStep('execute');
@@ -307,6 +308,7 @@ export default function GeoHud() {
           timerLabel={timerLabel}
           audit={flow.audit}
           lines={flow.lines}
+          showConversationLog={voice.isConnected}
         />
       </main>
     </div>
