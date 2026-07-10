@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import '@/app/geo-hud.css';
 import AuditResults from '@/components/AuditResults';
 import { GeoConfirmScreen } from '@/components/geo/GeoConfirmScreen';
@@ -13,7 +14,7 @@ import { StepRail } from '@/components/geo/StepRail';
 import { useCredits } from '@/hooks/useCredits';
 import { useGeoHudFlow } from '@/hooks/useGeoHudFlow';
 import { resolveBrainMode } from '@/lib/brainMode';
-import { useSorenVoice } from '@/lib/soren-voice/soren-voice-provider';
+import { useSorenVoice, setVoiceSessionLog } from '@/lib/soren-voice/soren-voice-provider';
 import { useSorenChatLog } from '@/lib/soren-voice/use-soren-chat-log';
 
 export default function GeoHud() {
@@ -21,6 +22,11 @@ export default function GeoHud() {
   const voice = useSorenVoice();
   const flow = useGeoHudFlow(voice.room);
   useSorenChatLog(flow.append);
+
+  useEffect(() => {
+    setVoiceSessionLog(flow.append);
+    return () => setVoiceSessionLog(null);
+  }, [flow.append]);
 
   const brainMode = resolveBrainMode(
     flow.phase,

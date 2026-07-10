@@ -2,6 +2,7 @@ import {
   ConnectionState,
   Room,
   TokenSource,
+  decodeTokenPayload,
   type TokenSourceResponseObject,
 } from 'livekit-client';
 import { mintVoiceToken } from './mint-voice-token';
@@ -15,8 +16,19 @@ let tokenFetchInFlight: Promise<TokenSourceResponseObject> | null = null;
 
 let fetchGate: Promise<void> | null = null;
 let openFetchGate: (() => void) | null = null;
+let tokenArmed = false;
 
 let connectInFlight = false;
+
+let voiceLogFn: ((line: string) => void) | null = null;
+
+export function setVoiceSessionLog(fn: ((line: string) => void) | null): void {
+  voiceLogFn = fn;
+}
+
+export function voiceSessionLog(line: string): void {
+  voiceLogFn?.(line);
+}
 
 function ensureFetchGate(): Promise<void> {
   if (!fetchGate) {
@@ -27,9 +39,30 @@ function ensureFetchGate(): Promise<void> {
   return fetchGate;
 }
 
-/** Unblocks token HTTP until the user clicks TALK TO SOREN (or submits name). */
+async function waitUntilArmed(): Promise<void> {
+  if (tokenArmed) return;
+  await ensureFetchGate();
+}
+
+function tokenRoomName(token: string): string {
+  try {
+    const payload = decodeTokenPayload(token);
+    return payload.video?.room ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** Unblocks token HTTP — must run synchronously on user click before session.start(). */
 export function armTokenFetch(): void {
-  openFetchGate?.();
+  console.log('[voice] armed');
+  tokenArmed = true;
+  if (openFetchGate) {
+    openFetchGate();
+    openFetchGate = null;
+  } else {
+    fetchGate = Promise.resolve();
+  }
 }
 
 export function resetFetchGate(): void {
@@ -44,19 +77,26 @@ export function clearSessionTokenCache(): void {
 
 export function resetForNewSession(): void {
   clearSessionTokenCache();
+  tokenArmed = false;
   resetFetchGate();
 }
 
 async function fetchSessionToken(): Promise<TokenSourceResponseObject> {
   if (cachedToken) {
-    console.log('[HUD] token cache hit');
+    console.log('[voice] token cache hit');
     return cachedToken;
   }
   if (tokenFetchInFlight) return tokenFetchInFlight;
 
   tokenFetchInFlight = (async () => {
-    await ensureFetchGate();
-    console.log('[HUD] token fetch');
+    if (!tokenArmed) {
+      await waitUntilArmed();
+    }
+    if (!tokenArmed) {
+      console.error('[voice] token fetch while unarmed');
+      armTokenFetch();
+    }
+
     const userVoiceToken = await mintVoiceToken();
     const storedName = localStorage.getItem(USER_NAME_KEY);
 
@@ -83,6 +123,7 @@ async function fetchSessionToken(): Promise<TokenSourceResponseObject> {
       participantToken: json.data.token,
     };
     cachedToken = result;
+    console.log(`[voice] token fetched room=${tokenRoomName(result.participantToken)}`);
     return result;
   })().finally(() => {
     tokenFetchInFlight = null;

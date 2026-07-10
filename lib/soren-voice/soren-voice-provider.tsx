@@ -16,7 +16,12 @@ import {
   useVoiceAssistant,
 } from '@livekit/components-react';
 import type { UseSessionReturn } from '@livekit/components-react';
-import { ConnectionState, type Room } from 'livekit-client';
+import {
+  ConnectionState,
+  RoomEvent,
+  type RemoteParticipant,
+  type Room,
+} from 'livekit-client';
 import { AgentSessionProvider } from './agent-session-provider';
 import { StartAudioButton } from './start-audio-button';
 import { NameModal } from './name-modal';
@@ -31,6 +36,7 @@ import {
   resetForNewSession,
   teardownSession,
   tryAcquireConnect,
+  voiceSessionLog,
 } from './session-lifecycle';
 import { USER_NAME_KEY } from './constants';
 
@@ -94,10 +100,29 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
   const [showNameModal, setShowNameModal] = useState(false);
   const pendingConnectRef = useRef(false);
   const connectAttemptRef = useRef(false);
+  const agentJoinedRef = useRef(false);
 
   const room = getSharedRoom();
   const tokenSource = getSharedTokenSource();
   const session = useSession(tokenSource, { room });
+
+  useEffect(() => {
+    const onConnected = () => {
+      console.log('[voice] connected');
+    };
+    const onParticipant = (p: RemoteParticipant) => {
+      if (p.isAgent && !agentJoinedRef.current) {
+        agentJoinedRef.current = true;
+        console.log('[voice] agent joined');
+      }
+    };
+    room.on(RoomEvent.Connected, onConnected);
+    room.on(RoomEvent.ParticipantConnected, onParticipant);
+    return () => {
+      room.off(RoomEvent.Connected, onConnected);
+      room.off(RoomEvent.ParticipantConnected, onParticipant);
+    };
+  }, [room]);
 
   useEffect(() => {
     const onUnload = () => {
@@ -113,18 +138,23 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(async () => {
     if (connectAttemptRef.current || isRoomSessionLive(room) || !tryAcquireConnect()) {
-      console.log('[HUD] connect skipped — session already active or in flight');
+      console.log('[voice] connect skipped — session already active or in flight');
       return;
     }
     connectAttemptRef.current = true;
+    agentJoinedRef.current = false;
     try {
       if (room.state !== ConnectionState.Disconnected) {
         await room.disconnect();
       }
       resetForNewSession();
       armTokenFetch();
-      console.log('[HUD] session.start()');
+      console.log('[voice] connecting');
+      voiceSessionLog('Soren: Connecting…');
       await session.start();
+    } catch (err) {
+      console.error('[voice] connect failed', err);
+      voiceSessionLog("Soren: I couldn't connect — try again");
     } finally {
       connectAttemptRef.current = false;
       releaseConnect();
@@ -133,7 +163,7 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
 
   const activate = useCallback(() => {
     if (isRoomSessionLive(room) || connectAttemptRef.current) {
-      console.log('[HUD] activate skipped — session already active');
+      console.log('[voice] activate skipped — session already active');
       return;
     }
     fireActivationAudio();
@@ -143,17 +173,19 @@ export function SorenVoiceProvider({ children }: { children: ReactNode }) {
       setShowNameModal(true);
       return;
     }
+    armTokenFetch();
     void connect();
   }, [connect, room]);
 
   const handleNameSubmit = useCallback(
     (name: string) => {
       if (isRoomSessionLive(room) || connectAttemptRef.current) {
-        console.log('[HUD] name submit skipped — session already active');
+        console.log('[voice] name submit skipped — session already active');
         setShowNameModal(false);
         pendingConnectRef.current = false;
         return;
       }
+      armTokenFetch();
       localStorage.setItem(USER_NAME_KEY, name);
       setShowNameModal(false);
       if (pendingConnectRef.current) {
@@ -186,3 +218,5 @@ export function useSorenVoice(): SorenVoiceContextValue {
   }
   return ctx;
 }
+
+export { setVoiceSessionLog } from './session-lifecycle';
