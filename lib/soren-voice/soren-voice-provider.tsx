@@ -14,6 +14,7 @@ import {
   useSession,
   useSessionContext,
   useVoiceAssistant,
+  RoomAudioRenderer,
 } from '@livekit/components-react';
 import type { UseSessionReturn } from '@livekit/components-react';
 import {
@@ -52,6 +53,13 @@ export interface SorenVoiceContextValue {
 }
 
 const SorenVoiceContext = createContext<SorenVoiceContextValue | null>(null);
+
+function VoiceAudioRenderer() {
+  useEffect(() => {
+    console.log('[voice] audio renderer mounted');
+  }, []);
+  return <RoomAudioRenderer />;
+}
 
 /**
  * LIVE voice stack — sole path from TALK TO SOREN → session.start().
@@ -95,6 +103,7 @@ function SorenVoiceBridge({
 
   return (
     <SorenVoiceContext.Provider value={value}>
+      <VoiceAudioRenderer />
       {showNameModal && <NameModal onSubmit={onNameSubmit} />}
       {children}
       <StartAudioButton label="🔊 Tap to enable audio" />
