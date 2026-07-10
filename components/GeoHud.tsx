@@ -8,6 +8,7 @@ import {
   GeoInputScreen,
 } from '@/components/geo/GeoInputScreen';
 import { GeoConfirmScreen } from '@/components/geo/GeoConfirmScreen';
+import { GeoScanErrorScreen } from '@/components/geo/GeoScanErrorScreen';
 import { GeoScanScreen } from '@/components/geo/GeoScanScreen';
 import { HudLeftPanel } from '@/components/geo/HudLeftPanel';
 import { HudRightRail } from '@/components/geo/HudRightRail';
@@ -270,6 +271,18 @@ export default function GeoHud() {
             )}
             {!bookingConfirmed && !checkoutDelivery && flow.phase === 'scanning' && (
               <GeoScanScreen heardUrl={flow.heardUrl} />
+            )}
+            {!bookingConfirmed && !checkoutDelivery && flow.phase === 'scan_failed' && flow.scanError && (
+              <GeoScanErrorScreen
+                url={flow.heardUrl || flow.url}
+                message={flow.scanError}
+                onTryAgain={flow.retryScan}
+                onEditUrl={() => {
+                  flow.setUrl(flow.heardUrl || flow.url);
+                  flow.goToInput();
+                  setTimeout(focusWebsiteInput, 60);
+                }}
+              />
             )}
             {!bookingConfirmed && !checkoutDelivery && flow.phase === 'result' && flow.audit && (
               <AuditResults

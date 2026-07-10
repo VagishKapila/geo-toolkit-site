@@ -1,4 +1,5 @@
 const BASE = 'https://toolkit-demo-host-production-ac14.up.railway.app';
+const SCAN_TIMEOUT_MS = 30_000;
 
 export interface GeoCheck {
   name: string;
@@ -35,30 +36,77 @@ export function normalizeUrl(raw: string): string {
   return /^https?:\/\//i.test(t) ? t : `https://${t}`;
 }
 
+export function looksLikeWebsite(raw: string): boolean {
+  const normalized = normalizeUrl(raw);
+  try {
+    const host = new URL(normalized).hostname.toLowerCase();
+    if (!host || host.length < 3) return false;
+    if (host === 'localhost' || host.endsWith('.localhost')) return true;
+    if (!host.includes('.') || host.startsWith('.') || host.endsWith('.')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function friendlyScanError(status: number, apiError: string | undefined, url: string): string {
+  const lower = (apiError ?? '').toLowerCase();
+  if (
+    status === 502
+    || lower.includes('cannot reach')
+    || lower.includes('enotfound')
+    || lower.includes('fetch failed')
+  ) {
+    return `I couldn't find or reach ${url}. Check the spelling, make sure the site is live, and try again.`;
+  }
+  if (status === 400 || lower.includes('invalid url')) {
+    return `That doesn't look like a valid website address. Try something like example.com.`;
+  }
+  if (status === 408 || lower.includes('timeout') || lower.includes('aborted')) {
+    return `The scan timed out before ${url} responded. The site may be down — try again in a moment.`;
+  }
+  if (apiError) return apiError;
+  return `Scan failed for ${url}. Check the address and try again.`;
+}
+
 export async function runAudit(url: string): Promise<GeoAudit> {
   const normalized = normalizeUrl(url);
-  const res = await fetch(`${BASE}/api/geo-audit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: normalized }),
-  });
+  if (!looksLikeWebsite(normalized)) {
+    throw new Error(
+      `That doesn't look like a valid website. Enter a domain like example.com and try again.`,
+    );
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/geo-audit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: normalized }),
+      signal: AbortSignal.timeout(SCAN_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const isTimeout =
+      err instanceof Error
+      && (err.name === 'TimeoutError' || err.name === 'AbortError');
+    throw new Error(
+      isTimeout
+        ? `The scan timed out — ${normalized} didn't respond in time. Check the URL and try again.`
+        : `I couldn't reach ${normalized}. Check your connection and the website address.`,
+    );
+  }
+
   if (!res.ok) {
-    let msg = `Scan failed (${res.status})`;
+    let apiError: string | undefined;
     try {
       const body = (await res.json()) as { error?: string };
-      if (
-        body?.error === 'Cannot reach URL'
-        || /cannot reach/i.test(body?.error ?? '')
-      ) {
-        msg = `I couldn't reach ${normalized} — the site isn't responding. Check the address and try again.`;
-      } else if (body?.error) {
-        msg = body.error;
-      }
+      apiError = body?.error;
     } catch {
-      /* keep default */
+      /* keep undefined */
     }
-    throw new Error(msg);
+    throw new Error(friendlyScanError(res.status, apiError, normalized));
   }
+
   const data = (await res.json()) as GeoAudit;
   return { ...data, url: normalized };
 }

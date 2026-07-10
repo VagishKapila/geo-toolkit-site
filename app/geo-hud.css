@@ -882,6 +882,75 @@
   margin-top: 12px;
 }
 
+.geo-hud-app .geo-hud-errorCard {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 120, 120, 0.45);
+  background: rgba(255, 120, 120, 0.08);
+}
+
+.geo-hud-app .geo-hud-errorCard b {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.geo-hud-app .geo-hud-errorCard p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.geo-hud-app .scanErrorScreen {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.geo-hud-app .scanErrorCard {
+  width: min(100%, 640px);
+  border: 1px solid rgba(255, 120, 120, 0.4);
+  border-radius: 16px;
+  padding: 22px;
+  background: rgba(255, 120, 120, 0.06);
+}
+
+.geo-hud-app .scanErrorEyebrow {
+  color: var(--red);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.geo-hud-app .scanErrorCard h2 {
+  margin: 10px 0 8px;
+  font-size: 26px;
+}
+
+.geo-hud-app .scanErrorTarget {
+  margin: 0 0 10px;
+  color: var(--muted);
+}
+
+.geo-hud-app .scanErrorMessage {
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+.geo-hud-app .scanErrorTips {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.geo-hud-app .scanErrorActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .geo-hud-audio-unlock {
   position: fixed;
   bottom: 24px;
