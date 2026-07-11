@@ -632,6 +632,31 @@
   gap: 12px;
 }
 
+.geo-hud-app .findingCategory {
+  margin-top: 18px;
+}
+
+.geo-hud-app .findingCategoryTitle {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.geo-hud-app .complianceFootnote {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.geo-hud-app .finding[data-kind='info'] {
+  border-style: dashed;
+  opacity: 0.92;
+}
+
 .geo-hud-app .finding {
   border: 1px solid var(--line);
   border-radius: 14px;
