@@ -90,9 +90,12 @@ export default function AuditResults({
       <ResultFindings
         checks={audit.checks}
         score={audit.score}
+        grade={audit.grade}
         url={audit.url}
+        comparison={audit.comparison}
         filter={filter}
         openKey={openKey}
+        onLog={onLog}
         onFilter={(kind) => {
           setFilter(kind);
           onRailStep('investigate');
