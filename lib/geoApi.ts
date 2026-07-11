@@ -11,6 +11,14 @@ export interface GeoCheck {
   info?: boolean;
 }
 
+export interface GeoAuditComparison {
+  previousScore: number;
+  previousGrade: string;
+  improvement: number;
+  newlyPassing: string[];
+  issuesFixed: number;
+}
+
 export interface GeoAudit {
   url: string;
   score: number;
@@ -22,6 +30,7 @@ export interface GeoAudit {
   platformConfidence?: string;
   platformSignals?: string[];
   fixApproach?: string;
+  comparison?: GeoAuditComparison;
 }
 
 export interface FixPackage {
@@ -71,7 +80,10 @@ function friendlyScanError(status: number, apiError: string | undefined, url: st
   return `Scan failed for ${url}. Check the address and try again.`;
 }
 
-export async function runAudit(url: string): Promise<GeoAudit> {
+export async function runAudit(
+  url: string,
+  options?: { previousAudit?: GeoAudit },
+): Promise<GeoAudit> {
   const normalized = normalizeUrl(url);
   if (!looksLikeWebsite(normalized)) {
     throw new Error(
@@ -79,12 +91,30 @@ export async function runAudit(url: string): Promise<GeoAudit> {
     );
   }
 
+  const params = new URLSearchParams();
+  if (options?.previousAudit) {
+    params.set('compare', String(options.previousAudit.score));
+  }
+  const query = params.toString();
+  const endpoint = `${BASE}/api/geo-audit${query ? `?${query}` : ''}`;
+
+  const body: {
+    url: string;
+    previousChecks?: { name: string; passed: boolean }[];
+  } = { url: normalized };
+  if (options?.previousAudit) {
+    body.previousChecks = options.previousAudit.checks.map((c) => ({
+      name: c.name,
+      passed: c.passed,
+    }));
+  }
+
   let res: Response;
   try {
-    res = await fetch(`${BASE}/api/geo-audit`, {
+    res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: normalized }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(SCAN_TIMEOUT_MS),
     });
   } catch (err) {

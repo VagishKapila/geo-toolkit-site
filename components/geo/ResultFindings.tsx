@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
-import type { GeoCheck } from '@/lib/geoApi';
+import type { GeoAuditComparison, GeoCheck } from '@/lib/geoApi';
+import { COMPLIANCE_FOOTNOTE } from '@/lib/complianceCopy';
+import { ImprovementCard } from '@/components/geo/ImprovementCard';
 
 type FilterKind = 'all' | 'issue' | 'warn' | 'pass';
 
@@ -10,9 +12,6 @@ const CATEGORY_ORDER = [
   'Accessibility basics',
   'Security hardening',
 ] as const;
-
-const COMPLIANCE_FOOTNOTE =
-  'Technical signals only — not a legal compliance audit. Consult a qualified advisor for full ADA/WCAG/security compliance.';
 
 function findingKind(c: GeoCheck): FilterKind | 'info' {
   if (c.info) return 'info';
@@ -43,7 +42,9 @@ function groupChecks(checks: GeoCheck[]) {
 interface Props {
   checks: GeoCheck[];
   score: number;
+  grade: string;
   url: string;
+  comparison?: GeoAuditComparison;
   filter: FilterKind;
   openKey: string | null;
   onFilter: (kind: FilterKind) => void;
@@ -52,12 +53,15 @@ interface Props {
   onMaster: () => void;
   onGoHome: () => void;
   onShowAll: () => void;
+  onLog?: (msg: string) => void;
 }
 
 export function ResultFindings({
   checks,
   score,
+  grade,
   url,
+  comparison,
   filter,
   openKey,
   onFilter,
@@ -66,6 +70,7 @@ export function ResultFindings({
   onMaster,
   onGoHome,
   onShowAll,
+  onLog,
 }: Props) {
   const detailRef = useRef<HTMLDivElement>(null);
   const failing = checks.filter((c) => !c.passed && !c.info);
@@ -131,6 +136,14 @@ export function ResultFindings({
           ×
         </button>
       </div>
+      {comparison && comparison.improvement > 0 && (
+        <ImprovementCard
+          comparison={comparison}
+          afterScore={score}
+          afterGrade={grade}
+          onLog={onLog}
+        />
+      )}
       <div className="scoreHead">
         <div className="ring" style={{ background: ringGradient }}>
           <span>{score}</span>

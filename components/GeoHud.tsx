@@ -287,7 +287,7 @@ export default function GeoHud() {
   const switchToTypedEntry = useCallback(() => {
     interrupt();
     void setMicEnabled(false);
-    flow.goToInput();
+    flow.prepareForRescan();
     setTimeout(focusWebsiteInput, 60);
     flow.append('Switched to typed entry. Soren paused.');
   }, [flow, interrupt, setMicEnabled]);

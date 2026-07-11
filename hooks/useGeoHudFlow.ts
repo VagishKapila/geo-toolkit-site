@@ -39,6 +39,7 @@ export function useGeoHudFlow(room: Room) {
   const [showPartner, setShowPartner] = useState(false);
   const [scanInFlight, setScanInFlight] = useState(false);
   const [urlDetectionEnabled, setUrlDetectionEnabled] = useState(true);
+  const [previousAudit, setPreviousAudit] = useState<GeoAudit | null>(null);
   const processedVoiceRef = useRef<Set<string>>(new Set());
 
   const recoverVoiceAfterScanError = useCallback(async () => {
@@ -107,13 +108,23 @@ export function useGeoHudFlow(room: Room) {
     setScanInFlight(true);
     append(`Scanning GEO signals for ${trimmed}.`);
     try {
-      const result = await runAudit(trimmed);
+      const result = await runAudit(
+        trimmed,
+        previousAudit ? { previousAudit } : undefined,
+      );
       setAudit(result);
+      setPreviousAudit(null);
       setPhase('result');
       setRailStep('result');
-      append(
-        `Scan complete. Score ${result.score}. Findings are now clickable.`,
-      );
+      if (result.comparison && result.comparison.improvement > 0) {
+        append(
+          `Scan complete. Score improved ${result.comparison.previousScore} → ${result.score} (+${result.comparison.improvement}).`,
+        );
+      } else {
+        append(
+          `Scan complete. Score ${result.score}. Findings are now clickable.`,
+        );
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Scan failed';
       setUrl(trimmed);
@@ -127,7 +138,7 @@ export function useGeoHudFlow(room: Room) {
     } finally {
       setScanInFlight(false);
     }
-  }, [append, recoverVoiceAfterScanError, setUrl]);
+  }, [append, previousAudit, recoverVoiceAfterScanError, setUrl]);
 
   const startConfirm = useCallback((target: string) => {
     const normalized = displayUrl(target);
@@ -231,6 +242,11 @@ export function useGeoHudFlow(room: Room) {
     append('Returned home. Enter a new website when ready.');
   }, [append]);
 
+  const prepareForRescan = useCallback(() => {
+    if (audit) setPreviousAudit(audit);
+    goToInput();
+  }, [audit, goToInput]);
+
   const retryScan = useCallback(() => {
     void beginScan(heardUrl || url);
   }, [beginScan, heardUrl, url]);
@@ -272,6 +288,7 @@ export function useGeoHudFlow(room: Room) {
     prepareNewConversation,
     endSession,
     goToInput,
+    prepareForRescan,
     retryScan,
     backToResults,
   };
