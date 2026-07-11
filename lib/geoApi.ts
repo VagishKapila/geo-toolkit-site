@@ -7,6 +7,8 @@ export interface GeoCheck {
   points?: number;
   maxPoints?: number;
   tip?: string;
+  category?: string;
+  info?: boolean;
 }
 
 export interface GeoAudit {
