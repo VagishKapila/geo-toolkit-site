@@ -8,6 +8,14 @@ import {
   type TranscriptionSegment,
 } from 'livekit-client';
 
+const SDK_NOISE_PATTERN =
+  /connected to.*Server|connection state changed|publishing track|signal connect|unpublishing track/i;
+
+function isFilteredTranscript(text: string): boolean {
+  if (text.length < 3) return true;
+  return SDK_NOISE_PATTERN.test(text);
+}
+
 export interface TranscriptLogHandlers {
   onUserLine: (text: string) => void;
   onSorenLine: (text: string) => void;
@@ -40,6 +48,11 @@ export function useTranscriptLog(room: Room, handlers: TranscriptLogHandlers) {
         const isLocal =
           participant?.isLocal === true
           || participant?.identity === localIdentity;
+
+        if (isLocal && isFilteredTranscript(text)) {
+          console.debug('[transcript] filtered SDK noise', text);
+          continue;
+        }
 
         if (isLocal) {
           handlersRef.current.onUserLine(text);

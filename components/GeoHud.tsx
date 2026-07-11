@@ -50,6 +50,38 @@ export default function GeoHud() {
   const [voiceConnectionFailed, setVoiceConnectionFailed] = useState(false);
   const [roomState, setRoomState] = useState(voice.room.state);
   const handledCheckoutRef = useRef(false);
+  const connectionTimeoutRef = useRef<number | null>(null);
+  const voicePendingRef = useRef({
+    voiceActivating: false,
+    roomState: voice.room.state,
+    isConnected: false,
+    rawAgentState: voice.rawAgentState,
+  });
+
+  voicePendingRef.current = {
+    voiceActivating,
+    roomState,
+    isConnected: voice.isConnected,
+    rawAgentState: voice.rawAgentState,
+  };
+
+  const clearConnectionTimeout = useCallback(() => {
+    if (connectionTimeoutRef.current != null) {
+      window.clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
+  }, []);
+
+  const isVoiceConnectionPending = useCallback(() => {
+    const s = voicePendingRef.current;
+    return (
+      s.voiceActivating
+      || s.roomState === ConnectionState.Connecting
+      || s.roomState === ConnectionState.Reconnecting
+      || s.roomState === ConnectionState.SignalReconnecting
+      || (s.isConnected && s.rawAgentState === 'connecting')
+    );
+  }, []);
 
   useEffect(() => {
     const onStateChange = () => setRoomState(voice.room.state);
@@ -64,21 +96,36 @@ export default function GeoHud() {
       setVoiceActivating(false);
       setVoiceConnectionFailed(false);
     }
-  }, [voice.isConnected]);
+    if (
+      voice.isConnected
+      && voice.rawAgentState !== 'connecting'
+      && roomState === ConnectionState.Connected
+    ) {
+      clearConnectionTimeout();
+    }
+  }, [
+    clearConnectionTimeout,
+    roomState,
+    voice.isConnected,
+    voice.rawAgentState,
+  ]);
 
   useEffect(() => {
-    if (voiceConnectionFailed) return;
+    if (voiceConnectionFailed) {
+      clearConnectionTimeout();
+      return;
+    }
 
-    const isPending =
-      voiceActivating
-      || roomState === ConnectionState.Connecting
-      || roomState === ConnectionState.Reconnecting
-      || roomState === ConnectionState.SignalReconnecting
-      || (voice.isConnected && voice.rawAgentState === 'connecting');
+    if (!isVoiceConnectionPending()) {
+      clearConnectionTimeout();
+      return;
+    }
 
-    if (!isPending) return;
+    clearConnectionTimeout();
+    connectionTimeoutRef.current = window.setTimeout(() => {
+      connectionTimeoutRef.current = null;
+      if (!isVoiceConnectionPending()) return;
 
-    const timeout = window.setTimeout(() => {
       void (async () => {
         try {
           await teardownSession(voice.room);
@@ -92,9 +139,11 @@ export default function GeoHud() {
       })();
     }, 10_000);
 
-    return () => window.clearTimeout(timeout);
+    return clearConnectionTimeout;
   }, [
+    clearConnectionTimeout,
     flow,
+    isVoiceConnectionPending,
     roomState,
     voice.isConnected,
     voice.rawAgentState,
@@ -102,6 +151,8 @@ export default function GeoHud() {
     voiceActivating,
     voiceConnectionFailed,
   ]);
+
+  useEffect(() => () => clearConnectionTimeout(), [clearConnectionTimeout]);
 
   useEffect(() => {
     if (handledCheckoutRef.current) return;
