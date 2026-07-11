@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '@/app/geo-hud.css';
+import { ConnectionState, RoomEvent } from 'livekit-client';
 import AuditResults from '@/components/AuditResults';
 import {
   focusWebsiteInput,
@@ -29,6 +30,7 @@ import {
   type FixPackageResponse,
   type StoredAiPackageData,
 } from '@/lib/fixDeliveryActions';
+import { VoiceStatusBanner } from '@/components/geo/VoiceStatusBanner';
 import { useInterrupt } from '@/lib/soren-voice/use-interrupt';
 
 export default function GeoHud() {
@@ -43,7 +45,23 @@ export default function GeoHud() {
     siteUrl: string;
   } | null>(null);
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
+  const [voiceActivating, setVoiceActivating] = useState(false);
+  const [roomState, setRoomState] = useState(voice.room.state);
   const handledCheckoutRef = useRef(false);
+
+  useEffect(() => {
+    const onStateChange = () => setRoomState(voice.room.state);
+    voice.room.on(RoomEvent.ConnectionStateChanged, onStateChange);
+    return () => {
+      voice.room.off(RoomEvent.ConnectionStateChanged, onStateChange);
+    };
+  }, [voice.room]);
+
+  useEffect(() => {
+    if (voice.isConnected) {
+      setVoiceActivating(false);
+    }
+  }, [voice.isConnected]);
 
   useEffect(() => {
     if (handledCheckoutRef.current) return;
@@ -133,16 +151,32 @@ export default function GeoHud() {
   const sysMode =
     flow.railStep.charAt(0).toUpperCase() + flow.railStep.slice(1);
 
-  const toggleMute = useCallback(async () => {
-    const next = !muted;
-    setMuted(next);
-    try {
-      await voice.room.localParticipant.setMicrophoneEnabled(!next);
-      flow.append(next ? 'Microphone muted.' : 'Microphone unmuted.');
-    } catch {
-      flow.append('Could not toggle microphone.');
+  const voiceStatusMessage = useMemo(() => {
+    if (
+      voiceActivating
+      || roomState === ConnectionState.Connecting
+      || roomState === ConnectionState.Reconnecting
+    ) {
+      return 'Connecting to Soren… this may take a few seconds.';
     }
-  }, [flow, muted, voice.room]);
+    if (voice.isConnected && voice.rawAgentState === 'connecting') {
+      return 'Soren is getting ready…';
+    }
+    if (
+      voice.isConnected
+      && (voice.rawAgentState === 'listening' || voice.rawAgentState === 'idle')
+      && flow.phase === 'input'
+    ) {
+      return 'Listening — say the website you want to check.';
+    }
+    return null;
+  }, [
+    flow.phase,
+    roomState,
+    voice.isConnected,
+    voice.rawAgentState,
+    voiceActivating,
+  ]);
 
   const setMicEnabled = useCallback(
     async (enabled: boolean) => {
@@ -154,6 +188,25 @@ export default function GeoHud() {
     },
     [voice.room],
   );
+
+  const switchToTypedEntry = useCallback(() => {
+    interrupt();
+    void setMicEnabled(false);
+    flow.goToInput();
+    setTimeout(focusWebsiteInput, 60);
+    flow.append('Switched to typed entry. Soren paused.');
+  }, [flow, interrupt, setMicEnabled]);
+
+  const toggleMute = useCallback(async () => {
+    const next = !muted;
+    setMuted(next);
+    try {
+      await voice.room.localParticipant.setMicrophoneEnabled(!next);
+      flow.append(next ? 'Microphone muted.' : 'Microphone unmuted.');
+    } catch {
+      flow.append('Could not toggle microphone.');
+    }
+  }, [flow, muted, voice.room]);
 
   const pauseConfirmEdit = useCallback(() => {
     interrupt();
@@ -176,12 +229,6 @@ export default function GeoHud() {
     void flow.beginScan(flow.heardUrl);
   }, [flow, interrupt, muted, setMicEnabled]);
 
-  const switchToTypedEntry = useCallback(() => {
-    interrupt();
-    flow.goToInput();
-    setTimeout(focusWebsiteInput, 60);
-  }, [flow, interrupt]);
-
   const startVoiceConversation = useCallback(async () => {
     const resumeFromScanError = flow.phase === 'scan_failed' && voice.isConnected;
     const needsInputScreen =
@@ -192,6 +239,7 @@ export default function GeoHud() {
     if (needsInputScreen) {
       flow.goToInput();
     }
+    setVoiceActivating(true);
 
     if (voice.isConnected) {
       if (resumeFromScanError) {
@@ -203,12 +251,19 @@ export default function GeoHud() {
       }
       await flow.prepareNewConversation();
       voice.activate();
+      if (!muted) void setMicEnabled(true);
       flow.append('Starting a fresh conversation.');
       return;
     }
     voice.activate();
-    flow.append("I'm listening. Please say the website you want me to check.");
-  }, [flow, setMicEnabled, voice]);
+    flow.append('Connecting to Soren…');
+  }, [flow, muted, setMicEnabled, voice]);
+
+  useEffect(() => {
+    if (voice.isConnected && voiceActivating && !muted) {
+      void setMicEnabled(true);
+    }
+  }, [voice.isConnected, voiceActivating, muted, setMicEnabled]);
 
   const handleResetAll = useCallback(async () => {
     interrupt();
@@ -253,6 +308,9 @@ export default function GeoHud() {
         <section className="center">
           <StepRail active={flow.railStep} />
           <section className="panel workspace">
+            {voiceStatusMessage && (
+              <VoiceStatusBanner message={voiceStatusMessage} />
+            )}
             {bookingConfirmed && (
               <BookingConfirmed onClose={() => setBookingConfirmed(false)} />
             )}
@@ -331,7 +389,7 @@ export default function GeoHud() {
           timerLabel={timerLabel}
           audit={flow.audit}
           lines={flow.lines}
-          showConversationLog={voice.isConnected}
+          showConversationLog={voice.isConnected || voiceActivating}
         />
       </main>
     </div>

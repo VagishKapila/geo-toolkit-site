@@ -2096,6 +2096,34 @@
   min-height: 0;
 }
 
+.geo-hud-app .voiceStatusBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #c9e4de;
+  background: #eef9f6;
+  color: #1d5c52;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.geo-hud-app .voiceStatusSpinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #b8d9d0;
+  border-top-color: #2d6a4f;
+  border-radius: 50%;
+  animation: geo-hud-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+
+.geo-hud-app .workspace .voiceStatusBanner + .screen {
+  margin-top: 0;
+}
+
 .geo-hud-app .logPanel .log {
   flex: 1;
   max-height: none;
