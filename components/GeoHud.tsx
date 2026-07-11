@@ -32,6 +32,7 @@ import {
 } from '@/lib/fixDeliveryActions';
 import { VoiceStatusBanner } from '@/components/geo/VoiceStatusBanner';
 import { useInterrupt } from '@/lib/soren-voice/use-interrupt';
+import { teardownSession } from '@/lib/soren-voice/session-lifecycle';
 
 export default function GeoHud() {
   const { email } = useCredits();
@@ -46,6 +47,7 @@ export default function GeoHud() {
   } | null>(null);
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
   const [voiceActivating, setVoiceActivating] = useState(false);
+  const [voiceConnectionFailed, setVoiceConnectionFailed] = useState(false);
   const [roomState, setRoomState] = useState(voice.room.state);
   const handledCheckoutRef = useRef(false);
 
@@ -60,8 +62,46 @@ export default function GeoHud() {
   useEffect(() => {
     if (voice.isConnected) {
       setVoiceActivating(false);
+      setVoiceConnectionFailed(false);
     }
   }, [voice.isConnected]);
+
+  useEffect(() => {
+    if (voiceConnectionFailed) return;
+
+    const isPending =
+      voiceActivating
+      || roomState === ConnectionState.Connecting
+      || roomState === ConnectionState.Reconnecting
+      || roomState === ConnectionState.SignalReconnecting
+      || (voice.isConnected && voice.rawAgentState === 'connecting');
+
+    if (!isPending) return;
+
+    const timeout = window.setTimeout(() => {
+      void (async () => {
+        try {
+          await teardownSession(voice.room);
+        } catch {
+          /* ignore */
+        }
+        setVoiceActivating(false);
+        setVoiceConnectionFailed(true);
+        flow.append('Voice connection timed out — tap Talk to Soren to retry.');
+        console.log('[voice] connection timeout — forced teardown');
+      })();
+    }, 10_000);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    flow,
+    roomState,
+    voice.isConnected,
+    voice.rawAgentState,
+    voice.room,
+    voiceActivating,
+    voiceConnectionFailed,
+  ]);
 
   useEffect(() => {
     if (handledCheckoutRef.current) return;
@@ -152,6 +192,9 @@ export default function GeoHud() {
     flow.railStep.charAt(0).toUpperCase() + flow.railStep.slice(1);
 
   const voiceStatusMessage = useMemo(() => {
+    if (voiceConnectionFailed) {
+      return 'Connection failed — tap to retry';
+    }
     if (
       voiceActivating
       || roomState === ConnectionState.Connecting
@@ -176,6 +219,7 @@ export default function GeoHud() {
     voice.isConnected,
     voice.rawAgentState,
     voiceActivating,
+    voiceConnectionFailed,
   ]);
 
   const setMicEnabled = useCallback(
@@ -230,7 +274,20 @@ export default function GeoHud() {
   }, [flow, interrupt, muted, setMicEnabled]);
 
   const startVoiceConversation = useCallback(async () => {
-    const resumeFromScanError = flow.phase === 'scan_failed' && voice.isConnected;
+    const isMidConnect =
+      roomState === ConnectionState.Connecting
+      || roomState === ConnectionState.Reconnecting
+      || roomState === ConnectionState.SignalReconnecting;
+
+    if (voiceConnectionFailed || isMidConnect) {
+      try {
+        await teardownSession(voice.room);
+      } catch {
+        /* ignore */
+      }
+      setVoiceConnectionFailed(false);
+    }
+
     const needsInputScreen =
       flow.phase === 'scan_failed'
       || flow.phase === 'confirm'
@@ -242,13 +299,6 @@ export default function GeoHud() {
     setVoiceActivating(true);
 
     if (voice.isConnected) {
-      if (resumeFromScanError) {
-        setMuted(false);
-        await setMicEnabled(true);
-        voice.activate();
-        flow.append("I'm listening. Say the website you want me to check.");
-        return;
-      }
       await flow.prepareNewConversation();
       voice.activate();
       if (!muted) void setMicEnabled(true);
@@ -257,7 +307,7 @@ export default function GeoHud() {
     }
     voice.activate();
     flow.append('Connecting to Soren…');
-  }, [flow, muted, setMicEnabled, voice]);
+  }, [flow, muted, roomState, setMicEnabled, voice, voiceConnectionFailed]);
 
   useEffect(() => {
     if (voice.isConnected && voiceActivating && !muted) {
@@ -309,7 +359,15 @@ export default function GeoHud() {
           <StepRail active={flow.railStep} />
           <section className="panel workspace">
             {voiceStatusMessage && (
-              <VoiceStatusBanner message={voiceStatusMessage} />
+              <VoiceStatusBanner
+                message={voiceStatusMessage}
+                failed={voiceConnectionFailed}
+                onRetry={
+                  voiceConnectionFailed
+                    ? () => void startVoiceConversation()
+                    : undefined
+                }
+              />
             )}
             {bookingConfirmed && (
               <BookingConfirmed onClose={() => setBookingConfirmed(false)} />

@@ -2145,6 +2145,19 @@
   flex-shrink: 0;
 }
 
+.geo-hud-app .voiceStatusBanner--failed {
+  width: 100%;
+  cursor: pointer;
+  border-color: #e8c4a8;
+  background: #fff6ef;
+  color: #8a4b1f;
+  text-align: left;
+}
+
+.geo-hud-app .voiceStatusBanner--failed:hover {
+  background: #ffefe3;
+}
+
 .geo-hud-app .workspace .voiceStatusBanner + .screen {
   margin-top: 0;
 }

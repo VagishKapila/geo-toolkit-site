@@ -9,7 +9,6 @@ import {
 } from '@/lib/extractWebsiteFromSpeech';
 import { useSorenEvents, type SorenEvent } from '@/lib/soren-voice/use-soren-events';
 import {
-  resetVoiceSession,
   teardownSession,
 } from '@/lib/soren-voice/session-lifecycle';
 import { type RailStep } from '@/lib/geoMetrics';
@@ -43,13 +42,17 @@ export function useGeoHudFlow(room: Room) {
   const processedVoiceRef = useRef<Set<string>>(new Set());
 
   const recoverVoiceAfterScanError = useCallback(async () => {
-    resetVoiceSession();
+    try {
+      await teardownSession(room);
+    } catch {
+      /* ignore disconnect errors */
+    }
     try {
       await room.localParticipant.setMicrophoneEnabled(true);
     } catch {
-      /* room may not be connected yet */
+      /* room disconnected after teardown */
     }
-    console.log('[voice] scan error recovery — mic/session reset');
+    console.log('[voice] scan error — full session teardown + recovery');
   }, [room]);
 
   const setUrl = useCallback((value: string) => {
@@ -119,7 +122,7 @@ export function useGeoHudFlow(room: Room) {
       setRailStep('input');
       setUrlDetectionEnabled(true);
       processedVoiceRef.current.clear();
-      void recoverVoiceAfterScanError();
+      await recoverVoiceAfterScanError();
       append(`Scan failed: ${msg}`);
     } finally {
       setScanInFlight(false);
