@@ -1,11 +1,12 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Mic } from 'lucide-react';
 
 interface Props {
   url: string;
   error: string | null;
+  scanInFlight?: boolean;
   onUrlChange: (v: string) => void;
   onStart: () => void;
   onStartVoice: () => void;
@@ -24,11 +25,23 @@ function urlErrorMessage(error: string): string {
 export function GeoInputScreen({
   url,
   error,
+  scanInFlight = false,
   onUrlChange,
   onStart,
   onStartVoice,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState(false);
+  const scanning = scanInFlight || pending;
+
+  useEffect(() => {
+    if (error) setPending(false);
+  }, [error]);
+
+  const handleStart = () => {
+    setPending(true);
+    onStart();
+  };
 
   return (
     <section className="screen active hero heroTextFirst">
@@ -47,15 +60,15 @@ export function GeoInputScreen({
             placeholder="example.com"
             autoComplete="url"
             onChange={(e) => onUrlChange(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && url.trim() && onStart()}
+            onKeyDown={(e) => e.key === 'Enter' && url.trim() && !scanning && handleStart()}
           />
           <button
             type="button"
-            className="scanWebsiteBtn"
-            disabled={!url.trim()}
-            onClick={onStart}
+            className={`scanWebsiteBtn${scanning ? ' scanWebsiteBtn--scanning' : ''}`}
+            disabled={!url.trim() || scanning}
+            onClick={handleStart}
           >
-            Scan Website
+            {scanning ? 'Scanning…' : 'Scan Website'}
           </button>
         </div>
         {error && (

@@ -1435,6 +1435,39 @@
   box-shadow: none;
 }
 
+.geo-hud-app .scanWebsiteBtn--scanning {
+  animation: scanBtnPulse 1.2s ease-in-out infinite;
+}
+
+.geo-hud-app .scanWebsiteBtn--scanning::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: scanBtnSpin 0.75s linear infinite;
+}
+
+@keyframes scanBtnPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.88;
+  }
+}
+
+@keyframes scanBtnSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .geo-hud-app .urlScanError {
   display: flex;
   align-items: flex-start;

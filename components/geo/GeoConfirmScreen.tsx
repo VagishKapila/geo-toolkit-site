@@ -6,6 +6,7 @@ interface ConfirmProps {
   heardUrl: string;
   countdown: number;
   editing: boolean;
+  scanInFlight?: boolean;
   onEdit: () => void;
   onConfirmNow: () => void;
   onHeardChange: (v: string) => void;
@@ -17,6 +18,7 @@ export function GeoConfirmScreen({
   heardUrl,
   countdown,
   editing,
+  scanInFlight = false,
   onEdit,
   onConfirmNow,
   onHeardChange,
@@ -68,14 +70,24 @@ export function GeoConfirmScreen({
           <button type="button" className="btn secondary" onClick={focusAndPause}>
             EDIT SPELLING
           </button>
-          <button type="button" className="btn amber" onClick={onConfirmNow}>
-            CONFIRM NOW
+          <button
+            type="button"
+            className={`btn amber${scanInFlight ? ' scanWebsiteBtn--scanning' : ''}`}
+            disabled={scanInFlight}
+            onClick={onConfirmNow}
+          >
+            {scanInFlight ? 'Scanning…' : 'CONFIRM NOW'}
           </button>
         </div>
         {editing && (
           <div className="editActions">
-            <button type="button" className="btn" onClick={onSaveScan}>
-              SAVE &amp; SCAN
+            <button
+              type="button"
+              className={`btn${scanInFlight ? ' scanWebsiteBtn--scanning' : ''}`}
+              disabled={scanInFlight}
+              onClick={onSaveScan}
+            >
+              {scanInFlight ? 'Scanning…' : 'SAVE & SCAN'}
             </button>
             <button type="button" className="btn secondary" onClick={onResume}>
               RESUME 8 SEC

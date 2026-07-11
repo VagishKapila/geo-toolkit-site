@@ -141,6 +141,8 @@ export default function GeoHud() {
     ? voice.agentBadge
     : '● AWAITING WEBSITE';
 
+  const topStatus = flow.scanInFlight ? 'SCANNING' : voice.statusLabel;
+
   const timerLabel =
     flow.phase === 'confirm' && !flow.editing
       ? `${flow.countdown} sec`
@@ -228,15 +230,25 @@ export default function GeoHud() {
   }, [flow, interrupt, muted, setMicEnabled]);
 
   const startVoiceConversation = useCallback(async () => {
-    if (
+    const resumeFromScanError = flow.phase === 'scan_failed' && voice.isConnected;
+    const needsInputScreen =
       flow.phase === 'scan_failed'
       || flow.phase === 'confirm'
-      || flow.phase === 'scanning'
-    ) {
+      || flow.phase === 'scanning';
+
+    if (needsInputScreen) {
       flow.goToInput();
     }
     setVoiceActivating(true);
+
     if (voice.isConnected) {
+      if (resumeFromScanError) {
+        setMuted(false);
+        await setMicEnabled(true);
+        voice.activate();
+        flow.append("I'm listening. Say the website you want me to check.");
+        return;
+      }
       await flow.prepareNewConversation();
       voice.activate();
       if (!muted) void setMicEnabled(true);
@@ -254,9 +266,10 @@ export default function GeoHud() {
   }, [voice.isConnected, voiceActivating, muted, setMicEnabled]);
 
   const handleResetAll = useCallback(async () => {
+    interrupt();
     promo.reset();
     await flow.resetAll();
-  }, [flow, promo]);
+  }, [flow, interrupt, promo]);
 
   const handleEndSession = useCallback(async () => {
     await flow.endSession();
@@ -270,7 +283,7 @@ export default function GeoHud() {
   return (
     <div className="geo-hud-app">
       <HudTopBar
-        status={voice.statusLabel}
+        status={topStatus}
         muted={muted}
         onMuteToggle={() => void toggleMute()}
         onStop={handleStop}
@@ -320,6 +333,7 @@ export default function GeoHud() {
               <GeoInputScreen
                 url={flow.url}
                 error={flow.error}
+                scanInFlight={flow.scanInFlight}
                 onUrlChange={flow.setUrl}
                 onStart={() => flow.startConfirm(flow.url)}
                 onStartVoice={() => void startVoiceConversation()}
@@ -330,6 +344,7 @@ export default function GeoHud() {
                 heardUrl={flow.heardUrl}
                 countdown={flow.countdown}
                 editing={flow.editing}
+                scanInFlight={flow.scanInFlight}
                 onEdit={pauseConfirmEdit}
                 onConfirmNow={() => void flow.beginScan(flow.heardUrl)}
                 onHeardChange={flow.setHeardUrl}
