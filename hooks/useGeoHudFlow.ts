@@ -195,6 +195,7 @@ export function useGeoHudFlow(room: Room) {
   }, [append, room]);
 
   const goToInput = useCallback(() => {
+    processedVoiceRef.current.clear();
     setPhase('input');
     setRailStep('input');
     setShowMaster(false);
