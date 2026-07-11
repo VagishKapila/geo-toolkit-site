@@ -123,6 +123,8 @@ export default function GeoHud() {
     ? voice.agentBadge
     : '● AWAITING WEBSITE';
 
+  const topStatus = flow.scanInFlight ? 'SCANNING' : voice.statusLabel;
+
   const timerLabel =
     flow.phase === 'confirm' && !flow.editing
       ? `${flow.countdown} sec`
@@ -174,8 +176,31 @@ export default function GeoHud() {
     void flow.beginScan(flow.heardUrl);
   }, [flow, interrupt, muted, setMicEnabled]);
 
+  const switchToTypedEntry = useCallback(() => {
+    interrupt();
+    flow.goToInput();
+    setTimeout(focusWebsiteInput, 60);
+  }, [flow, interrupt]);
+
   const startVoiceConversation = useCallback(async () => {
+    const resumeFromScanError = flow.phase === 'scan_failed' && voice.isConnected;
+    const needsInputScreen =
+      flow.phase === 'scan_failed'
+      || flow.phase === 'confirm'
+      || flow.phase === 'scanning';
+
+    if (needsInputScreen) {
+      flow.goToInput();
+    }
+
     if (voice.isConnected) {
+      if (resumeFromScanError) {
+        setMuted(false);
+        await setMicEnabled(true);
+        voice.activate();
+        flow.append("I'm listening. Say the website you want me to check.");
+        return;
+      }
       await flow.prepareNewConversation();
       voice.activate();
       flow.append('Starting a fresh conversation.');
@@ -183,12 +208,13 @@ export default function GeoHud() {
     }
     voice.activate();
     flow.append("I'm listening. Please say the website you want me to check.");
-  }, [flow, voice]);
+  }, [flow, setMicEnabled, voice]);
 
   const handleResetAll = useCallback(async () => {
+    interrupt();
     promo.reset();
     await flow.resetAll();
-  }, [flow, promo]);
+  }, [flow, interrupt, promo]);
 
   const handleEndSession = useCallback(async () => {
     await flow.endSession();
@@ -202,7 +228,7 @@ export default function GeoHud() {
   return (
     <div className="geo-hud-app">
       <HudTopBar
-        status={voice.statusLabel}
+        status={topStatus}
         muted={muted}
         onMuteToggle={() => void toggleMute()}
         onStop={handleStop}
@@ -215,11 +241,7 @@ export default function GeoHud() {
           modeLine={modeLine}
           connected={voice.isConnected}
           onTalk={() => void startVoiceConversation()}
-          onEnterUrl={() => {
-            flow.goToInput();
-            setTimeout(focusWebsiteInput, 60);
-            flow.append('Enter a website URL to scan.');
-          }}
+          onEnterUrl={switchToTypedEntry}
           showEnterUrl={flow.phase !== 'input'}
           onViewMaster={() => {
             flow.setShowMaster(true);
@@ -253,6 +275,7 @@ export default function GeoHud() {
               <GeoInputScreen
                 url={flow.url}
                 error={flow.error}
+                scanInFlight={flow.scanInFlight}
                 onUrlChange={flow.setUrl}
                 onStart={() => flow.startConfirm(flow.url)}
                 onStartVoice={() => void startVoiceConversation()}
@@ -263,6 +286,7 @@ export default function GeoHud() {
                 heardUrl={flow.heardUrl}
                 countdown={flow.countdown}
                 editing={flow.editing}
+                scanInFlight={flow.scanInFlight}
                 onEdit={pauseConfirmEdit}
                 onConfirmNow={() => void flow.beginScan(flow.heardUrl)}
                 onHeardChange={flow.setHeardUrl}
@@ -280,8 +304,7 @@ export default function GeoHud() {
                 onTryAgain={flow.retryScan}
                 onEditUrl={() => {
                   flow.setUrl(flow.heardUrl || flow.url);
-                  flow.goToInput();
-                  setTimeout(focusWebsiteInput, 60);
+                  switchToTypedEntry();
                 }}
               />
             )}
@@ -296,7 +319,7 @@ export default function GeoHud() {
                 onShowPartner={flow.setShowPartner}
                 onRailStep={flow.setRailStep}
                 onLog={flow.append}
-                onGoHome={flow.goToInput}
+                onGoHome={switchToTypedEntry}
                 onBackToResults={flow.backToResults}
                 promo={promo}
               />

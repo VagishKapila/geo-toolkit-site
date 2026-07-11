@@ -8,7 +8,10 @@ import {
   isSorenEcho,
 } from '@/lib/extractWebsiteFromSpeech';
 import { useSorenEvents, type SorenEvent } from '@/lib/soren-voice/use-soren-events';
-import { teardownSession } from '@/lib/soren-voice/session-lifecycle';
+import {
+  resetVoiceSession,
+  teardownSession,
+} from '@/lib/soren-voice/session-lifecycle';
 import { type RailStep } from '@/lib/geoMetrics';
 import { runAudit, looksLikeWebsite, type GeoAudit } from '@/lib/geoApi';
 
@@ -35,7 +38,19 @@ export function useGeoHudFlow(room: Room) {
   const [voiceRequestedFix, setVoiceRequestedFix] = useState(false);
   const [showMaster, setShowMaster] = useState(false);
   const [showPartner, setShowPartner] = useState(false);
+  const [scanInFlight, setScanInFlight] = useState(false);
+  const [urlDetectionEnabled, setUrlDetectionEnabled] = useState(true);
   const processedVoiceRef = useRef<Set<string>>(new Set());
+
+  const recoverVoiceAfterScanError = useCallback(async () => {
+    resetVoiceSession();
+    try {
+      await room.localParticipant.setMicrophoneEnabled(true);
+    } catch {
+      /* room may not be connected yet */
+    }
+    console.log('[voice] scan error recovery — mic/session reset');
+  }, [room]);
 
   const setUrl = useCallback((value: string) => {
     setUrlState(value);
@@ -85,6 +100,8 @@ export function useGeoHudFlow(room: Room) {
     setHeardUrl(trimmed);
     setError(null);
     setScanError(null);
+    setUrlDetectionEnabled(false);
+    setScanInFlight(true);
     append(`Scanning GEO signals for ${trimmed}.`);
     try {
       const result = await runAudit(trimmed);
@@ -100,9 +117,14 @@ export function useGeoHudFlow(room: Room) {
       setScanError(msg);
       setPhase('scan_failed');
       setRailStep('input');
+      setUrlDetectionEnabled(true);
+      processedVoiceRef.current.clear();
+      void recoverVoiceAfterScanError();
       append(`Scan failed: ${msg}`);
+    } finally {
+      setScanInFlight(false);
     }
-  }, [append]);
+  }, [append, recoverVoiceAfterScanError, setUrl]);
 
   const startConfirm = useCallback((target: string) => {
     const normalized = displayUrl(target);
@@ -117,6 +139,7 @@ export function useGeoHudFlow(room: Room) {
     setHeardUrl(normalized);
     setEditing(false);
     setCountdown(8);
+    setUrlDetectionEnabled(false);
     setPhase('confirm');
     setRailStep('confirm');
     append(`Showing 8-second confirmation for ${normalized}.`);
@@ -133,8 +156,7 @@ export function useGeoHudFlow(room: Room) {
   }, [phase, editing, countdown, heardUrl, beginScan]);
 
   useEffect(() => {
-    // Voice URL detection only on the input screen — never during confirm/edit.
-    if (phase !== 'input') return;
+    if (!urlDetectionEnabled || phase !== 'input') return;
     for (const line of lines) {
       if (!line.startsWith('You: ')) continue;
       const text = line.slice(5);
@@ -146,7 +168,7 @@ export function useGeoHudFlow(room: Room) {
       startConfirm(displayUrl(site));
       break;
     }
-  }, [lines, phase, startConfirm]);
+  }, [lines, phase, startConfirm, urlDetectionEnabled]);
 
   const onSorenEvent = useCallback((e: SorenEvent) => {
     if (e.type === 'geo_audit_result') {
@@ -201,6 +223,7 @@ export function useGeoHudFlow(room: Room) {
     setShowPartner(false);
     setEditing(false);
     setScanError(null);
+    setUrlDetectionEnabled(true);
     append('Returned home. Enter a new website when ready.');
   }, [append]);
 
@@ -233,6 +256,7 @@ export function useGeoHudFlow(room: Room) {
     audit,
     error,
     scanError,
+    scanInFlight,
     voiceRequestedFix,
     showMaster,
     setShowMaster,
