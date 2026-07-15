@@ -1100,6 +1100,8 @@
   font-size: 20px;
   display: grid;
   place-items: center;
+  text-decoration: none;
+  box-sizing: border-box;
 }
 
 .geo-hud-app .panel {

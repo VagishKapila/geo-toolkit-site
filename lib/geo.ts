@@ -1,13 +1,14 @@
 import { GEO } from '@varshylinc/geo';
 import type { GEOConfig } from '@varshylinc/geo';
 
-export const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://geo-toolkit-site.netlify.app';
+/** Prefer env; empty default keeps links/canonical root-relative across preview/prod. */
+export const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/+$/, '');
 
 export const geoConfig: GEOConfig = {
   product: {
     name: 'GEO — AI Discoverability Toolkit',
     tagline: 'Audit and fix your product for AI discoverability in minutes',
-    url: siteUrl,
+    url: siteUrl || '/',
     type: 'WebApplication',
     category: 'DeveloperApplication',
     platform: ['Web'],

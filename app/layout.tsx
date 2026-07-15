@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
+import { siteUrl } from "@/lib/geo";
 import "./globals.css";
+
+const absoluteSiteUrl = siteUrl || undefined;
 
 export const metadata: Metadata = {
   title: "GEO — AI Discoverability Toolkit",
   description: "Audit your product AI discoverability score. Fix missing signals with one command. Free, open source.",
-  metadataBase: new URL("https://geo-toolkit-site.netlify.app"),
+  ...(absoluteSiteUrl ? { metadataBase: new URL(absoluteSiteUrl) } : {}),
   openGraph: {
     title: "GEO — AI Discoverability Toolkit",
     description: "Audit your product AI discoverability score. Fix missing signals with one command.",
-    url: "https://geo-toolkit-site.netlify.app",
+    ...(absoluteSiteUrl ? { url: absoluteSiteUrl } : {}),
     siteName: "GEO — AI Discoverability Toolkit",
     images: [{ url: "/og-image.png", width: 1200, height: 630 }],
     type: "website",
@@ -20,7 +23,7 @@ export const metadata: Metadata = {
     images: ["/og-image.png"],
   },
   alternates: {
-    canonical: "https://geo-toolkit-site.netlify.app",
+    canonical: "/",
   },
 };
 
@@ -29,6 +32,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const appJsonLdUrl = absoluteSiteUrl || "/";
+
   return (
     <html lang="en">
       <body className="antialiased">
@@ -42,7 +47,7 @@ export default function RootLayout({
                   "@type": "SoftwareApplication",
                   "name": "GEO — AI Discoverability Toolkit",
                   "description": "Open-source npm package that makes any product readable by AI engines.",
-                  "url": "https://geo-toolkit-site.netlify.app",
+                  "url": appJsonLdUrl,
                   "applicationCategory": "DeveloperApplication",
                   "operatingSystem": "Any",
                   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
