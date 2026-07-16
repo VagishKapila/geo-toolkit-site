@@ -369,7 +369,7 @@ export default function GeoHud() {
   const handleHome = useCallback(() => {
     interrupt();
     promo.reset();
-    window.location.assign('/');
+    window.location.href = '/';
   }, [interrupt, promo]);
 
   const handleEndSession = useCallback(async () => {

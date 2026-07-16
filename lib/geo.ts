@@ -1,10 +1,21 @@
 import { GEO } from '@varshylinc/geo';
 import type { GEOConfig } from '@varshylinc/geo';
 
-/** Prod/preview: set NEXT_PUBLIC_SITE_URL. Local fallback is for OG/canonical resolution. */
-export const siteUrl = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
-).replace(/\/+$/, '');
+function resolveSiteUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (raw) {
+    const normalized = raw.replace(/\/+$/, '');
+    try {
+      return new URL(normalized).toString().replace(/\/+$/, '');
+    } catch {
+      // Invalid env URL falls back to local dev URL.
+    }
+  }
+  return 'http://localhost:3000';
+}
+
+/** Canonical base URL for metadata/OG; set NEXT_PUBLIC_SITE_URL per environment. */
+export const siteUrl = resolveSiteUrl();
 
 export const geoConfig: GEOConfig = {
   product: {
