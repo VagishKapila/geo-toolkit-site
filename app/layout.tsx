@@ -2,16 +2,14 @@ import type { Metadata } from "next";
 import { siteUrl } from "@/lib/geo";
 import "./globals.css";
 
-const absoluteSiteUrl = siteUrl || undefined;
-
 export const metadata: Metadata = {
   title: "GEO — AI Discoverability Toolkit",
   description: "Audit your product AI discoverability score. Fix missing signals with one command. Free, open source.",
-  ...(absoluteSiteUrl ? { metadataBase: new URL(absoluteSiteUrl) } : {}),
+  metadataBase: new URL(siteUrl),
   openGraph: {
     title: "GEO — AI Discoverability Toolkit",
     description: "Audit your product AI discoverability score. Fix missing signals with one command.",
-    ...(absoluteSiteUrl ? { url: absoluteSiteUrl } : {}),
+    url: siteUrl,
     siteName: "GEO — AI Discoverability Toolkit",
     images: [{ url: "/og-image.png", width: 1200, height: 630 }],
     type: "website",
@@ -23,7 +21,7 @@ export const metadata: Metadata = {
     images: ["/og-image.png"],
   },
   alternates: {
-    canonical: "/",
+    canonical: siteUrl,
   },
 };
 
@@ -32,8 +30,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const appJsonLdUrl = absoluteSiteUrl || "/";
-
   return (
     <html lang="en">
       <body className="antialiased">
@@ -47,7 +43,7 @@ export default function RootLayout({
                   "@type": "SoftwareApplication",
                   "name": "GEO — AI Discoverability Toolkit",
                   "description": "Open-source npm package that makes any product readable by AI engines.",
-                  "url": appJsonLdUrl,
+                  "url": siteUrl,
                   "applicationCategory": "DeveloperApplication",
                   "operatingSystem": "Any",
                   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },

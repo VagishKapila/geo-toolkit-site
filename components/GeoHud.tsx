@@ -366,11 +366,11 @@ export default function GeoHud() {
     }
   }, [voice.isConnected, voiceActivating, muted, setMicEnabled]);
 
-  const handleResetAll = useCallback(async () => {
+  const handleHome = useCallback(() => {
     interrupt();
     promo.reset();
-    await flow.resetAll();
-  }, [flow, interrupt, promo]);
+    window.location.assign('/');
+  }, [interrupt, promo]);
 
   const handleEndSession = useCallback(async () => {
     await flow.endSession();
@@ -389,7 +389,7 @@ export default function GeoHud() {
         onMuteToggle={() => void toggleMute()}
         onStop={handleStop}
         onEndSession={() => void handleEndSession()}
-        onHome={() => void handleResetAll()}
+        onHome={handleHome}
       />
       <main className="main">
         <HudLeftPanel

@@ -1,14 +1,16 @@
 import { GEO } from '@varshylinc/geo';
 import type { GEOConfig } from '@varshylinc/geo';
 
-/** Prefer env; empty default keeps links/canonical root-relative across preview/prod. */
-export const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/+$/, '');
+/** Prod/preview: set NEXT_PUBLIC_SITE_URL. Local fallback is for OG/canonical resolution. */
+export const siteUrl = (
+  process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+).replace(/\/+$/, '');
 
 export const geoConfig: GEOConfig = {
   product: {
     name: 'GEO — AI Discoverability Toolkit',
     tagline: 'Audit and fix your product for AI discoverability in minutes',
-    url: siteUrl || '/',
+    url: siteUrl,
     type: 'WebApplication',
     category: 'DeveloperApplication',
     platform: ['Web'],

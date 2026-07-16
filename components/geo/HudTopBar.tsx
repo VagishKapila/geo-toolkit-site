@@ -41,15 +41,15 @@ export function HudTopBar({
         <button type="button" className="topControl end" onClick={onEndSession}>
           End Session
         </button>
-        <a
-          href="/"
+        <button
+          type="button"
           aria-label="Return home"
           className="homeIcon"
           title="Home"
-          onClick={() => onHome()}
+          onClick={onHome}
         >
           ⌂
-        </a>
+        </button>
       </div>
     </header>
   );
